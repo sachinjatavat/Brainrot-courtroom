@@ -2,10 +2,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = require(ReplicatedStorage.Shared)
 local Config, CaseGenerator, RoleAssigner, Verdict = Shared.Config, Shared.CaseGenerator, Shared.RoleAssigner, Shared.Verdict
+local WitnessMemory, ArgumentScoring, EvidenceSystem = Shared.WitnessMemory, Shared.ArgumentScoring, Shared.EvidenceSystem
+local CourtroomEvents, NPCSystem = Shared.CourtroomEvents, Shared.NPCSystem
 
 local RoundService = {}
 local random = Random.new()
-local state = { Phase = "Lobby", TimeLeft = 0, Roles = {}, Votes = {}, Case = nil, Chaos = nil }
+local state = { Phase = "Lobby", TimeLeft = 0, Roles = {}, Votes = {}, Case = nil, Chaos = nil, Arguments = {}, ArgumentScores = { Prosecutor = 0, Defense = 0 }, NPCs = {} }
 local remotes
 local cooldowns = {}
 local DataService
@@ -27,6 +29,8 @@ local function broadcast()
 		Case = state.Case, Votes = state.Votes, Chaos = state.Chaos,
 		BotJuryCount = state.BotJuryCount, Silenced = state.Silenced,
 		ConfessionRequired = state.ConfessionRequired, Confession = state.Confession,
+		EvidenceInspection = state.EvidenceInspection, WitnessResponses = state.WitnessResponses,
+		ArgumentScores = state.ArgumentScores, NPCs = state.NPCs,
 	})
 end
 
@@ -72,6 +76,7 @@ local function spawnBananas()
 end
 
 local function applyChaos(name)
+	if not CourtroomEvents.IsValid(name) then return end
 	if name == "BANANA_FLOOD" then
 		activeEffects[name] = { Cleanup = spawnBananas() }
 	elseif name == "GRAVITY_GLITCH" then
@@ -91,13 +96,17 @@ local function applyChaos(name)
 		local firstCFrame, secondCFrame = first and first:GetPivot(), second and second:GetPivot()
 		if firstCFrame and secondCFrame then first:PivotTo(secondCFrame); second:PivotTo(firstCFrame) end
 		activeEffects[name] = { Cleanup = function() if first and first.Parent and secondCFrame then first:PivotTo(firstCFrame) end; if second and second.Parent and firstCFrame then second:PivotTo(secondCFrame) end end }
+	elseif name == "EVIDENCE_MIXUP" then
+		local previous = state.ActiveEvidence
+		state.ActiveEvidence = random:NextInteger(1, #state.Case.Evidence)
+		activeEffects[name] = { Cleanup = function() state.ActiveEvidence = previous end }
 	else
 		activeEffects[name] = { Cleanup = function() end }
 	end
 	state.Chaos = name
 	broadcast()
 	remotes.Notification:FireAllClients("CHAOS EVENT: " .. name:gsub("_", " "))
-	task.delay(7, function() clearEffect(name) end)
+	task.delay(CourtroomEvents.Get(name).Duration, function() clearEffect(name) end)
 end
 
 local function waitPhase(phase, seconds)
@@ -112,8 +121,11 @@ end
 local function cleanupRound()
 	for name in pairs(activeEffects) do clearEffect(name) end
 	state.Roles, state.Votes, state.Case = {}, {}, nil
-	state.ActiveEvidence, state.Chaos, state.Silenced, state.ReverseVerdict = nil, nil, false, false
-	state.ConfessionRequired = false
+	state.ActiveEvidence, state.EvidenceInspection, state.WitnessResponses, state.Chaos = nil, nil, {}, nil
+	state.WitnessMemory, state.Arguments, state.ArgumentScores, state.NPCs = {}, {}, { Prosecutor = 0, Defense = 0 }, {}
+	state.ConfessionRequired, state.Silenced, state.ReverseVerdict = false, false, false
+	local securityFolder = workspace:FindFirstChild("CourtroomSecurity")
+	if securityFolder then securityFolder:Destroy() end
 	broadcast()
 end
 
@@ -130,8 +142,27 @@ local function chaosLoop()
 	local delay = random:NextInteger(Config.Round.ChaosMinimumSeconds, Config.Round.ChaosMaximumSeconds)
 	task.wait(delay)
 	if state.Phase ~= "Trial" then return end
-	local events = { "GRAVITY_GLITCH", "BANANA_FLOOD", "EVERYONE_DANCES", "JUDGE_TINY", "POSITION_SWAP", "VOICE_LOSS" }
+	local events = { "GRAVITY_GLITCH", "BANANA_FLOOD", "EVERYONE_DANCES", "JUDGE_TINY", "POSITION_SWAP", "VOICE_LOSS", "EVIDENCE_MIXUP" }
 	applyChaos(events[random:NextInteger(1, #events)])
+end
+
+local function createSecurityNPCs()
+	local folder = Instance.new("Folder")
+	folder.Name, folder.Parent = "CourtroomSecurity", workspace
+	local roster = {}
+	for index = 1, 2 do
+		local npc = NPCSystem.CreateSecurity(index)
+		local model = Instance.new("Model")
+		model.Name = npc.Name
+		local root = Instance.new("Part")
+		root.Name, root.Size, root.Anchored, root.Position = "HumanoidRootPart", Vector3.new(2, 4, 2), true, Vector3.new(-42 + index * 5, 3, -28)
+		root.Color, root.Parent = Color3.fromRGB(45, 50, 70), model
+		model.PrimaryPart, model.Parent = root, folder
+		npc.Instance = model
+		table.insert(roster, npc)
+	end
+	state.NPCs = roster
+	return function() if folder.Parent then folder:Destroy() end end
 end
 
 local function runRound()
@@ -142,6 +173,17 @@ local function runRound()
 	end
 	state.Roles = RoleAssigner.Assign(players, random)
 	state.Case = CaseGenerator.Create(random)
+	if #players < Config.TargetPlayers then
+		local bot = NPCSystem.CreateBotWitness(1, random)
+		bot.Lines = { "I observed the incident from a safe distance.", "My data says the story changed.", "I require more evidence." }
+		table.insert(state.Case.Witnesses, bot)
+	end
+	state.WitnessMemory = {}
+	for index, witness in ipairs(state.Case.Witnesses) do
+		state.WitnessMemory[index] = WitnessMemory.Create(witness, random)
+	end
+	state.Arguments, state.ArgumentScores, state.WitnessResponses = {}, { Prosecutor = 0, Defense = 0 }, {}
+	local cleanupSecurity = createSecurityNPCs()
 	state.Votes = {}
 	state.BotJuryCount = math.max(0, Config.TargetPlayers - #players)
 	teleportAll()
@@ -160,7 +202,7 @@ local function runRound()
 	for index = 1, state.BotJuryCount do
 		state.Votes["BOT_JURY_" .. index] = random:NextNumber() > 0.45 and "GUILTY" or "NOT_GUILTY"
 	end
-	local verdict, guilty, notGuilty = Verdict.Calculate(state.Votes, true)
+	local verdict, guilty, notGuilty = Verdict.Calculate(state.Votes, true, state.ArgumentScores)
 	if verdict == "TIE" then verdict = "NOT_GUILTY" end
 	if state.ReverseVerdict then verdict = verdict == "GUILTY" and "NOT_GUILTY" or "GUILTY" end
 	state.Votes.Result, state.Votes.Guilty, state.Votes.NotGuilty = verdict, guilty, notGuilty
@@ -175,6 +217,7 @@ local function runRound()
 		end
 	end
 	waitPhase("Rewards", 8)
+	cleanupSecurity()
 	cleanupRound()
 end
 
@@ -208,13 +251,32 @@ function RoundService.Start(remoteFolder, dataService)
 			broadcast()
 		elseif action == "PresentEvidence" and (state.Roles[player.UserId] == "Prosecutor" or state.Roles[player.UserId] == "Defense") and state.Phase == "Trial" and validEvidence(payload) then
 			state.ActiveEvidence = payload
+			state.EvidenceInspection = EvidenceSystem.Present(state.Case, payload, player.DisplayName)
 			remotes.Notification:FireAllClients(player.DisplayName .. " presents evidence: " .. state.Case.Evidence[payload].Name)
 			broadcast()
+		elseif action == "InspectEvidence" and state.Phase == "Trial" and validEvidence(payload) then
+			state.EvidenceInspection = EvidenceSystem.Inspect(state.Case, payload)
+			remotes.Notification:FireClient(player, state.EvidenceInspection.Name .. ": " .. state.EvidenceInspection.Detail)
+			broadcast()
 		elseif action == "QuestionWitness" and not state.Silenced and (state.Roles[player.UserId] == "Prosecutor" or state.Roles[player.UserId] == "Defense") and state.Phase == "Trial" then
-			local witness = state.Case.Witnesses[(tonumber(payload) or 1) % #state.Case.Witnesses + 1]
-			remotes.Notification:FireAllClients(witness.Name .. " answers: " .. witness.Lines[random:NextInteger(1, #witness.Lines)])
+			local witnessIndex = math.clamp(tonumber(payload) or 1, 1, #state.Case.Witnesses)
+			local witness = state.Case.Witnesses[witnessIndex]
+			local memory = state.WitnessMemory[witnessIndex]
+			local answer = witness.Lines[random:NextInteger(1, #witness.Lines)]
+			local _, contradiction = WitnessMemory.Record(memory, "general testimony", answer, state.ActiveEvidence)
+			table.insert(state.WitnessResponses, { Witness = witness.Name, Answer = answer, Contradiction = contradiction })
+			remotes.Notification:FireAllClients(witness.Name .. " answers: " .. answer .. (contradiction and " [CONTRADICTION DETECTED]" or ""))
+			broadcast()
+		elseif action == "WitnessReact" and state.Phase == "Trial" and validEvidence(payload) then
+			local witness = state.Case.Witnesses[1]
+			remotes.Notification:FireAllClients(EvidenceSystem.React(witness, EvidenceSystem.Inspect(state.Case, payload)))
 		elseif action == "SubmitArgument" and not state.Silenced and (state.Roles[player.UserId] == "Prosecutor" or state.Roles[player.UserId] == "Defense") and state.Phase == "Trial" and type(payload) == "string" and #payload <= 180 then
-			remotes.Notification:FireAllClients(player.DisplayName .. " submits an argument.")
+			local side = state.Roles[player.UserId]
+			local result = ArgumentScoring.Evaluate(payload, side, state.Case, state.WitnessMemory, state.ActiveEvidence)
+			table.insert(state.Arguments, result)
+			state.ArgumentScores[side] += result.Score
+			remotes.Notification:FireAllClients(player.DisplayName .. " submits an argument (score " .. tostring(result.Score) .. ").")
+			broadcast()
 		elseif action == "Accuse" and state.Roles[player.UserId] == "Prosecutor" and state.Phase == "Trial" then
 			remotes.Notification:FireAllClients("The prosecutor accuses the defendant!")
 		elseif action == "DefendantStatement" and state.Roles[player.UserId] == "Defendant" and state.Phase == "Trial" then

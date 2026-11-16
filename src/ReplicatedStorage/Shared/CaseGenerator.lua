@@ -22,11 +22,11 @@ local evidence = {
 }
 
 local personalities = {
-	{ Name = "The Dramatic Poet", Lines = { "The truth is a slippery noodle!", "I saw everything, spiritually.", "Objection to reality!" } },
-	{ Name = "The Forgetful One", Lines = { "I had a statement, but it walked away.", "Was I here?", "Wait, who is on trial?" } },
-	{ Name = "The Overconfident Detective", Lines = { "Case closed. I have not investigated it.", "My instincts are 98% accurate.", "The evidence is evidence because I said so." } },
-	{ Name = "The Accidental Self-Accuser", Lines = { "The defendant did it! Also, possibly me.", "I confess to being a witness.", "Please do not inspect my pockets." } },
-	{ Name = "The Unrelated Storyteller", Lines = { "This reminds me of my battle with a toaster.", "When I was a young spoon...", "Anyway, the banana had excellent posture." } },
+	{ Name = "The Dramatic Poet", Truthfulness = 0.85, Story = { "saw a suspicious shadow", "heard a bassline" }, Lines = { "The truth is a slippery noodle!", "I saw everything, spiritually.", "Objection to reality!" } },
+	{ Name = "The Forgetful One", Truthfulness = 0.65, Story = { "was near the evidence room", "cannot recall the exact time" }, Lines = { "I had a statement, but it walked away.", "Was I here?", "Wait, who is on trial?" } },
+	{ Name = "The Overconfident Detective", Truthfulness = 0.9, Story = { "followed a footprint", "made a confident deduction" }, Lines = { "Case closed. I have not investigated it.", "My instincts are 98% accurate.", "The evidence is evidence because I said so." } },
+	{ Name = "The Accidental Self-Accuser", Truthfulness = 0.55, Story = { "was holding a banana", "heard a crash" }, Lines = { "The defendant did it! Also, possibly me.", "I confess to being a witness.", "Please do not inspect my pockets." } },
+	{ Name = "The Unrelated Storyteller", Truthfulness = 0.7, Story = { "remembers a toaster", "saw something shiny" }, Lines = { "This reminds me of my battle with a toaster.", "When I was a young spoon...", "Anyway, the banana had excellent posture." } },
 }
 
 local function choose(list, random)
@@ -43,8 +43,12 @@ function CaseGenerator.Create(random)
 		table.insert(selectedEvidence, table.remove(pool, index))
 	end
 	local witnesses = {}
-	for _ = 1, 2 do
-		table.insert(witnesses, choose(personalities, random))
+	for index = 1, 2 do
+		local personality = table.clone(choose(personalities, random))
+		personality.Id = "WITNESS_" .. tostring(index)
+		personality.Story = table.clone(personality.Story)
+		personality.Lie = random:NextNumber() > personality.Truthfulness
+		table.insert(witnesses, personality)
 	end
 	return {
 		Id = string.format("CASE-%d-%d", os.time(), random:NextInteger(100, 999)),

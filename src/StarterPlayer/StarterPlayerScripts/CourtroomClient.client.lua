@@ -54,7 +54,9 @@ local notGuiltyButton = button("NOT GUILTY", Color3.fromRGB(102, 224, 129), func
 local silenceButton = button("ORDER SILENCE", Color3.fromRGB(255, 210, 77), function() actionRemote:FireServer("JudgePower", "ORDER_SILENCE") end)
 local bananaButton = button("BANANA", Color3.fromRGB(255, 193, 72), function() actionRemote:FireServer("JudgePower", "THROW_BANANA") end)
 local evidenceButton = button("PRESENT EVIDENCE", Color3.fromRGB(72, 224, 214), function() actionRemote:FireServer("PresentEvidence", 1) end)
+local inspectEvidenceButton = button("INSPECT EVIDENCE", Color3.fromRGB(72, 224, 214), function() actionRemote:FireServer("InspectEvidence", 1) end)
 local witnessButton = button("QUESTION WITNESS", Color3.fromRGB(125, 214, 119), function() actionRemote:FireServer("QuestionWitness", 1) end)
+local reactButton = button("WITNESS REACTS", Color3.fromRGB(125, 214, 119), function() actionRemote:FireServer("WitnessReact", 1) end)
 local accuseButton = button("MAKE ACCUSATION", Color3.fromRGB(255, 105, 180), function() actionRemote:FireServer("Accuse") end)
 local statementButton = button("GIVE STATEMENT", Color3.fromRGB(255, 210, 77), function() actionRemote:FireServer("DefendantStatement") end)
 local securityButton = button("SUMMON SECURITY", Color3.fromRGB(255, 91, 91), function() actionRemote:FireServer("JudgePower", "SUMMON_SECURITY") end)
@@ -82,7 +84,8 @@ local function render(state)
 	actionBar.Visible = isJury and state.Phase == "Voting" or isJudge and state.Phase == "Trial"
 	if state.Chaos then detail.Text = "⚡ CHAOS: " .. state.Chaos:gsub("_", " ") .. " ⚡" end
 	local isLawyer = role == "Prosecutor" or role == "Defense"
-	evidenceButton.Visible, witnessButton.Visible = state.Phase == "Trial" and isLawyer, state.Phase == "Trial" and isLawyer
+	evidenceButton.Visible, inspectEvidenceButton.Visible = state.Phase == "Trial" and isLawyer, state.Phase == "Trial" and isLawyer
+	witnessButton.Visible, reactButton.Visible = state.Phase == "Trial" and isLawyer, state.Phase == "Trial" and isLawyer
 	accuseButton.Visible = state.Phase == "Trial" and role == "Prosecutor"
 	statementButton.Visible = state.Phase == "Trial" and role == "Defendant"
 	securityButton.Visible, confessionButton.Visible, reverseButton.Visible = state.Phase == "Trial" and isJudge, state.Phase == "Trial" and isJudge, state.Phase == "Trial" and isJudge
@@ -92,6 +95,9 @@ local function render(state)
 	startArgumentsButton.Visible, endArgumentsButton.Visible = state.Phase == "Trial" and isJudge, state.Phase == "Trial" and isJudge
 	if state.ActiveEvidence and case and case.Evidence[state.ActiveEvidence] then
 		detail.Text = "EVIDENCE: " .. case.Evidence[state.ActiveEvidence].Name .. " | " .. case.Evidence[state.ActiveEvidence].Detail
+	end
+	if state.ArgumentScores and isLawyer then
+		detail.Text = detail.Text .. string.format(" | ARGUMENTS P:%d D:%d", state.ArgumentScores.Prosecutor or 0, state.ArgumentScores.Defense or 0)
 	end
 	if state.Phase == "Verdict" and state.Votes and state.Votes.Result then
 		detail.Text = "FINAL VERDICT: " .. state.Votes.Result .. " (" .. tostring(state.Votes.Guilty) .. " guilty / " .. tostring(state.Votes.NotGuilty) .. " not guilty)"

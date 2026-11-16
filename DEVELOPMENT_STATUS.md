@@ -15,6 +15,10 @@ Implemented in source. Banana spawning, gravity changes, dance emote requests, j
 ## Remaining limitations
 - Roblox Studio multiplayer testing has not been run in this environment; engine behavior, UI layout on devices, animation availability, prompts, and DataStore permissions still need verification.
 - The courtroom uses generated primitives and placeholder interaction prompts; it has no authored audio, avatars, or persistent evidence inventory.
-- Security currently teleports the defendant to the jail position rather than running an NPC escort sequence.
-- Witness personality output is deterministic data-driven text with random line selection; it does not yet model a persistent lie state or contradiction graph.
-- Argument text is length-validated and announced, but not scored by a judge or used in verdict calculation.
+
+## Phase 5 - Deeper trial systems
+Implemented in source. Each generated witness now has a trial-local story, truthfulness/lie state, answer history, and contradiction detection. Lawyers can inspect and present evidence, trigger witness reactions, and submit arguments scored against genuine/misleading evidence and testimony consistency. Argument scores can resolve ties or overturn a narrow vote margin. Bot witnesses fill small rounds, security NPC models are spawned per round, and courtroom disasters include an evidence mix-up with timed cleanup.
+
+## Validation boundary
+- Shared logic coverage is present in `ServerScriptService/Tests/LogicTests.lua`; static Luau validation still needs to be run with the project's Rojo/Aftman toolchain.
+- Roblox Studio testing is still required for RemoteEvent wiring, generated NPC/model behavior, client UI layout, chaos cleanup under disconnects, and multiplayer timing/DataStore permissions.
