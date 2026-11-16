@@ -1,0 +1,13 @@
+# Rojo and Roblox place files
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+.rojo/
+
+# Windows and macOS metadata
+Thumbs.db
+.DS_Store
+
+# Local editor settings
+.vscode/

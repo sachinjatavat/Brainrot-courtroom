@@ -1,4 +1,4 @@
-{
+ {
   "name": "BrainrotCourtroom",
   "tree": {
     "$className": "DataModel",
@@ -7,6 +7,12 @@
     },
     "ServerScriptService": {
       "$path": "src/ServerScriptService"
+    },
+    "ServerStorage": {
+      "$path": "src/ServerStorage"
+    },
+    "StarterGui": {
+      "$path": "src/StarterGui"
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {

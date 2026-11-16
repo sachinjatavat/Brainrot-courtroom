@@ -2,4 +2,6 @@ LogicTests.lua is an executable server-side smoke test module. In Studio's serve
 
 require(game.ServerScriptService.Tests.LogicTests).Run()
 
-It verifies role cardinality, evidence bounds, and verdict calculation without requiring a live round.
+It verifies role cardinality, evidence bounds and dialogue data, verdict ties, and invalid vote values without requiring a live round.
+
+DataStore, RemoteEvent validation, disconnect cleanup, map prompts, teleportation, animations, and chaos effects require a Roblox Studio server playtest. These are not claimed as static-test results.

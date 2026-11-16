@@ -9,7 +9,9 @@ function RoleAssigner.Assign(players, random)
 	local roles = {}
 	local names = { "Judge", "Prosecutor", "Defense", "Defendant", "Witness", "Witness" }
 	for index, player in ipairs(shuffled) do
-		roles[player.UserId] = names[index] or "Jury"
+		if player and player.UserId then
+			roles[player.UserId] = names[index] or "Jury"
+		end
 	end
 	return roles
 end

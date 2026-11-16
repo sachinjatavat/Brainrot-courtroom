@@ -4,6 +4,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local DataService = {}
 local store = DataStoreService:GetDataStore("BrainrotCourtroom_v1")
 local profiles = {}
+local saving = {}
 local DEFAULT = {
 	Braincoins = 0, XP = 0, Level = 1, Wins = 0, TrialsPlayed = 0,
 	Unlocked = { "DefaultJudge", "DefaultLawyer" },
@@ -19,14 +20,19 @@ local function copy(value)
 end
 
 function DataService.Load(player)
+	if not player or not player.Parent then return nil end
 	local data
 	local success, result = pcall(function() return store:GetAsync("Player_" .. player.UserId) end)
 	if success and type(result) == "table" then
-		data = result
+		data = copy(DEFAULT)
+		for key, value in pairs(result) do data[key] = copy(value) end
+		data.Unlocked = type(result.Unlocked) == "table" and copy(result.Unlocked) or copy(DEFAULT.Unlocked)
+		data.Equipped = type(result.Equipped) == "table" and copy(result.Equipped) or copy(DEFAULT.Equipped)
 	else
 		data = copy(DEFAULT)
 		if not success then warn("[DataService] Load failed:", result) end
 	end
+	if not player.Parent then return nil end
 	profiles[player] = data
 	return data
 end
@@ -46,26 +52,30 @@ function DataService.AddXP(player, amount)
 		data.XP += amount
 		data.Level = math.max(1, math.floor(data.XP / 250) + 1)
 	end
+end
 
-	function DataService.ClaimDaily(player)
-		local data = profiles[player]
-		if not data then return false end
-		local today = math.floor(os.time() / 86400)
-		if data.LastDaily == today then return false end
-		data.LastDaily = today
-		DataService.AddCoins(player, 150)
-		DataService.AddXP(player, 50)
-		return true
-	end
+function DataService.ClaimDaily(player)
+	local data = profiles[player]
+	if not data then return false end
+	local today = math.floor(os.time() / 86400)
+	if data.LastDaily == today then return false end
+	data.LastDaily = today
+	DataService.AddCoins(player, 150)
+	DataService.AddXP(player, 50)
+	return true
 end
 
 function DataService.Save(player)
 	local data = profiles[player]
-	if not data then return false end
+	if not data or saving[player] then return false end
+	saving[player] = true
 	local success, errorMessage = pcall(function()
-		store:UpdateAsync("Player_" .. player.UserId, function() return data end)
+		store:UpdateAsync("Player_" .. player.UserId, function()
+			return copy(data)
+		end)
 	end)
 	if not success then warn("[DataService] Save failed:", errorMessage) end
+	saving[player] = nil
 	return success
 end
 
