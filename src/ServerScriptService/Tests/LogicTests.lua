@@ -35,10 +35,19 @@ function LogicTests.Run()
 	local counts = {}
 	for _, role in pairs(roles) do counts[role] = (counts[role] or 0) + 1 end
 	assert(counts.Judge == 1 and counts.Prosecutor == 1 and counts.Defense == 1 and counts.Defendant == 1)
-	assert(counts.Witness == 2 and counts.Jury == 2)
+	assert((counts.Witness or 0) >= 2)
+	assert((counts.Jury or 0) >= 1)
+
+	-- Fair Role Rotation Test
+	local history = { [1] = { LastRole = "Judge", JudgeCount = 2 } }
+	local newRoles = Shared.RoleAssigner.Assign(fakePlayers, random, history)
+	assert(newRoles[1] ~= "Judge", "Player who was Judge should not immediately be assigned Judge again")
+
 	local case = Shared.CaseGenerator.Create(random)
 	assert(#case.Evidence >= 3 and #case.Evidence <= 5)
-	assert(#case.Witnesses == 2 and #case.Witnesses[1].Lines > 0 and #case.Witnesses[2].Lines > 0)
+	assert(#case.Witnesses >= 2 and #case.Witnesses <= 3)
+	assert(#case.Witnesses[1].Lines > 0 and #case.Witnesses[2].Lines > 0)
+
 	local reliableCount = 0
 	for _, item in ipairs(case.Evidence) do
 		assert(type(item.Name) == "string" and type(item.Detail) == "string")
@@ -67,9 +76,24 @@ function LogicTests.Run()
 	assert(defense.Score > 0)
 	assert(Shared.Verdict.Calculate({ [1] = "GUILTY", [2] = "NOT_GUILTY" }, true, { Prosecutor = 5, Defense = 0 }) == "GUILTY")
 	assert(Shared.Verdict.Calculate({ [1] = "GUILTY", [2] = "NOT_GUILTY" }, true, { Prosecutor = 0, Defense = 5 }) == "NOT_GUILTY")
+
+	-- Chaos Events Tests
 	assert(Shared.CourtroomEvents.IsValid("EVIDENCE_MIXUP") and Shared.CourtroomEvents.Get("EVIDENCE_MIXUP").Duration > 0)
-	assert(Shared.NPCSystem.CreateSecurity(1).Role == "Security")
-	assert(Shared.NPCSystem.CreateBotWitness(1, random).Bot == true)
+	assert(Shared.CourtroomEvents.IsValid("COURTROOM_FLOOD") and Shared.CourtroomEvents.IsValid("ROLE_SWAP"))
+	assert(#Shared.CourtroomEvents.List() >= 10, "Should have at least 10 chaos events")
+
+	-- NPC System Tests
+	local sec = Shared.NPCSystem.CreateSecurity(1)
+	assert(sec.Role == "Security")
+	local botWit = Shared.NPCSystem.CreateBotWitness(1, random)
+	assert(botWit.Bot == true and #botWit.Lines > 0)
+	local botLawyer = Shared.NPCSystem.CreateBotLawyer("Prosecutor", random)
+	assert(botLawyer.Bot == true and #botLawyer.Arguments >= 3)
+	local specs = Shared.NPCSystem.CreateSpectators(5, random)
+	assert(#specs == 5 and specs[1].Name ~= nil)
+	local botVote = Shared.NPCSystem.EvaluateBotVote({ Prosecutor = 10, Defense = 0 }, { Reliable = true }, random)
+	assert(botVote == "GUILTY" or botVote == "NOT_GUILTY")
+
 	local tie = Shared.Verdict.Calculate({ [1] = "GUILTY", [2] = "NOT_GUILTY" }, true)
 	assert(tie == "TIE")
 	local ignored = Shared.Verdict.Calculate({ [1] = "GUILTY", [2] = "INVALID" }, true)

@@ -1,21 +1,22 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Shared = require(ReplicatedStorage.Shared)
 local SharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local Config = Shared.Config or require(SharedFolder:WaitForChild("Config"))
-local CaseGenerator = Shared.CaseGenerator or require(SharedFolder:WaitForChild("CaseGenerator"))
-local RoleAssigner = Shared.RoleAssigner or require(SharedFolder:WaitForChild("RoleAssigner"))
-local Verdict = Shared.Verdict or require(SharedFolder:WaitForChild("Verdict"))
-local WitnessMemory = Shared.WitnessMemory or require(SharedFolder:WaitForChild("WitnessMemory"))
-local ArgumentScoring = Shared.ArgumentScoring or require(SharedFolder:WaitForChild("ArgumentScoring"))
-local EvidenceSystem = Shared.EvidenceSystem or require(SharedFolder:WaitForChild("EvidenceSystem"))
-local CourtroomEvents = Shared.CourtroomEvents or require(SharedFolder:WaitForChild("CourtroomEvents"))
-local NPCSystem = Shared.NPCSystem or require(SharedFolder:WaitForChild("NPCSystem"))
-local Animations = Shared.Animations or require(SharedFolder:WaitForChild("Animations"))
-local Themes = Shared.Themes or require(SharedFolder:WaitForChild("Themes"))
-local CosmeticsCatalog = Shared.CosmeticsCatalog or require(SharedFolder:WaitForChild("CosmeticsCatalog"))
-local Progression = Shared.Progression or require(SharedFolder:WaitForChild("Progression"))
+
+local Config = require(SharedFolder:WaitForChild("Config"))
+local CaseGenerator = require(SharedFolder:WaitForChild("CaseGenerator"))
+local RoleAssigner = require(SharedFolder:WaitForChild("RoleAssigner"))
+local Verdict = require(SharedFolder:WaitForChild("Verdict"))
+local WitnessMemory = require(SharedFolder:WaitForChild("WitnessMemory"))
+local ArgumentScoring = require(SharedFolder:WaitForChild("ArgumentScoring"))
+local EvidenceSystem = require(SharedFolder:WaitForChild("EvidenceSystem"))
+local CourtroomEvents = require(SharedFolder:WaitForChild("CourtroomEvents"))
+local NPCSystem = require(SharedFolder:WaitForChild("NPCSystem"))
+local Animations = require(SharedFolder:WaitForChild("Animations"))
+local Themes = require(SharedFolder:WaitForChild("Themes"))
+local CosmeticsCatalog = require(SharedFolder:WaitForChild("CosmeticsCatalog"))
+local Progression = require(SharedFolder:WaitForChild("Progression"))
+
 local CosmeticsService = require(ServerScriptService.Services.CosmeticsService)
 local MapBuilder = require(ServerScriptService.Services.MapBuilder)
 
@@ -24,16 +25,19 @@ local random = Random.new()
 local state = {
 	Phase = "Lobby", TimeLeft = 0, Roles = {}, Votes = {},
 	Case = nil, Chaos = nil, Arguments = {}, ArgumentScores = { Prosecutor = 0, Defense = 0 },
-	NPCs = {}, ActiveTheme = "Classic",
+	NPCs = {}, ActiveTheme = "Classic", Awards = {},
 }
 local remotes
 local cooldowns = {}
 local emoteCooldowns = {}
+local roleHistory = {}
+local activityTracker = { AbilitiesUsed = {}, LongestArg = { Player = nil, Length = 0 } }
 local DataService
 local activeEffects = {}
+
 local VALID_ABILITIES = {
 	THROW_BANANA = true, ORDER_SILENCE = true, SUMMON_SECURITY = true,
-	FORCE_CONFESSION = true, REVERSE_VERDICT = true,
+	FORCE_CONFESSION = true, REVERSE_VERDICT = true, COURTROOM_EXPLOSION = true,
 }
 
 local ROLE_POSITIONS = {
@@ -43,6 +47,7 @@ local ROLE_POSITIONS = {
 	Defendant = CFrame.new(0, 7, -12),
 	Witness = CFrame.new(0, 8, 5),
 	Jury = CFrame.new(-44, 7, -22),
+	Spectator = CFrame.new(0, 5, -45),
 	Jail = CFrame.new(-48, 6, -42),
 }
 
@@ -54,20 +59,19 @@ local function broadcast()
 		ConfessionRequired = state.ConfessionRequired, Confession = state.Confession,
 		EvidenceInspection = state.EvidenceInspection, WitnessResponses = state.WitnessResponses,
 		ArgumentScores = state.ArgumentScores, NPCs = state.NPCs,
-		ActiveTheme = state.ActiveTheme,
+		ActiveTheme = state.ActiveTheme, Awards = state.Awards,
 	})
 end
 
 local function teleport(player, role)
-	local position = ROLE_POSITIONS[role]
-	if not position then return end
+	local position = ROLE_POSITIONS[role] or ROLE_POSITIONS.Spectator
 	local character = player.Character
 	if character then
 		character:PivotTo(position)
 		CosmeticsService.Apply(player, role, DataService.Get(player))
 	elseif player.Parent then
 		player.CharacterAdded:Once(function(newCharacter)
-			if state.Roles[player.UserId] == role and newCharacter.Parent then
+			if (state.Roles[player.UserId] == role or role == "Spectator") and newCharacter.Parent then
 				newCharacter:PivotTo(position)
 				CosmeticsService.Apply(player, role, DataService.Get(player))
 			end
@@ -93,12 +97,45 @@ end
 local function spawnBananas()
 	local folder = Instance.new("Folder")
 	folder.Name, folder.Parent = "ActiveBananas_" .. tostring(math.floor(os.clock() * 1000)), workspace
-	for _ = 1, 18 do
+	for _ = 1, 24 do
 		local banana = Instance.new("Part")
 		banana.Name, banana.Shape, banana.Size = "ChaosBanana", Enum.PartType.Ball, Vector3.new(1.5, 1.5, 1.5)
-		banana.Color, banana.Material = Color3.fromRGB(255, 210, 40), Enum.Material.Neon
-		banana.Position = Vector3.new(random:NextNumber(-45, 45), random:NextNumber(18, 30), random:NextNumber(-30, 35))
+		banana.Color, banana.Material = Color3.fromRGB(255, 215, 40), Enum.Material.Neon
+		banana.Position = Vector3.new(random:NextNumber(-45, 45), random:NextNumber(22, 34), random:NextNumber(-30, 35))
 		banana.CanCollide, banana.Parent = true, folder
+	end
+	return function() if folder.Parent then folder:Destroy() end end
+end
+
+local function spawnFloodWater()
+	local water = Instance.new("Part")
+	water.Name = "CourtroomFloodWater"
+	water.Size = Vector3.new(130, 4, 110)
+	water.Position = Vector3.new(0, 2, 0)
+	water.Anchored = true
+	water.CanCollide = false
+	water.Color = Color3.fromRGB(0, 160, 255)
+	water.Material = Enum.Material.Glass
+	water.Transparency = 0.4
+	water.Parent = workspace
+	return function() if water.Parent then water:Destroy() end end
+end
+
+local function spawnBrainrotInvasion()
+	local folder = Instance.new("Folder")
+	folder.Name = "BrainrotInvasion"
+	folder.Parent = workspace
+	for i = 1, 10 do
+		local orb = Instance.new("Part")
+		orb.Name = "MemeOrb"
+		orb.Shape = Enum.PartType.Ball
+		orb.Size = Vector3.new(3, 3, 3)
+		orb.Color = Color3.fromHSV(i / 10, 0.9, 1)
+		orb.Material = Enum.Material.Neon
+		orb.Position = Vector3.new(random:NextNumber(-35, 35), 6, random:NextNumber(-20, 20))
+		orb.Velocity = Vector3.new(random:NextNumber(-30, 30), 15, random:NextNumber(-30, 30))
+		orb.CanCollide = true
+		orb.Parent = folder
 	end
 	return function() if folder.Parent then folder:Destroy() end end
 end
@@ -128,12 +165,42 @@ local function applyChaos(name)
 		local previous = state.ActiveEvidence
 		state.ActiveEvidence = random:NextInteger(1, #state.Case.Evidence)
 		activeEffects[name] = { Cleanup = function() state.ActiveEvidence = previous end }
+	elseif name == "COURTROOM_FLOOD" then
+		activeEffects[name] = { Cleanup = spawnFloodWater() }
+	elseif name == "BRAINROT_INVASION" then
+		activeEffects[name] = { Cleanup = spawnBrainrotInvasion() }
+	elseif name == "ROLE_SWAP" then
+		local pId, dId
+		for uId, role in pairs(state.Roles) do
+			if role == "Prosecutor" then pId = uId end
+			if role == "Defense" then dId = uId end
+		end
+		if pId and dId then
+			state.Roles[pId], state.Roles[dId] = "Defense", "Prosecutor"
+			local pP, dP = Players:GetPlayerByUserId(pId), Players:GetPlayerByUserId(dId)
+			if pP then teleport(pP, "Defense") end
+			if dP then teleport(dP, "Prosecutor") end
+		end
+		activeEffects[name] = { Cleanup = function()
+			if pId and dId then
+				state.Roles[pId], state.Roles[dId] = "Prosecutor", "Defense"
+				local pP, dP = Players:GetPlayerByUserId(pId), Players:GetPlayerByUserId(dId)
+				if pP then teleport(pP, "Prosecutor") end
+				if dP then teleport(dP, "Defense") end
+			end
+		end }
+	elseif name == "EVERYONE_DANCES" then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Character then Animations.Play(p.Character, "DANCE", 6) end
+		end
+		activeEffects[name] = { Cleanup = function() end }
 	else
 		activeEffects[name] = { Cleanup = function() end }
 	end
+
 	state.Chaos = name
 	broadcast()
-	remotes.Notification:FireAllClients("CHAOS EVENT: " .. name:gsub("_", " "))
+	remotes.Notification:FireAllClients("⚡ CHAOS EVENT: " .. name:gsub("_", " ") .. " ⚡")
 	task.delay(CourtroomEvents.Get(name).Duration, function() clearEffect(name) end)
 end
 
@@ -152,16 +219,20 @@ local function cleanupRound()
 	state.ActiveEvidence, state.EvidenceInspection, state.WitnessResponses, state.Chaos = nil, nil, {}, nil
 	state.WitnessMemory, state.Arguments, state.ArgumentScores, state.NPCs = {}, {}, { Prosecutor = 0, Defense = 0 }, {}
 	state.ConfessionRequired, state.Silenced, state.ReverseVerdict = false, false, false
+	state.Awards = {}
+
 	local securityFolder = workspace:FindFirstChild("CourtroomSecurity")
 	if securityFolder then securityFolder:Destroy() end
 	local confettiFolder = workspace:FindFirstChild("VictoryConfetti")
 	if confettiFolder then confettiFolder:Destroy() end
+	local spectatorFolder = workspace:FindFirstChild("CourtroomSpectatorNPCs")
+	if spectatorFolder then spectatorFolder:Destroy() end
 
-	-- Return players to lobby and clear courtroom props
+	-- Return players to lobby and restore spectator styling
 	for _, player in ipairs(Players:GetPlayers()) do
 		local char = player.Character
 		if char then
-			char:PivotTo(CFrame.new(0, 5, 95))
+			char:PivotTo(CFrame.new(0, 5, 125))
 			CosmeticsService.Clear(char)
 			CosmeticsService.Apply(player, "Spectator", DataService.Get(player))
 		end
@@ -183,7 +254,11 @@ local function chaosLoop()
 	local delay = random:NextInteger(Config.Round.ChaosMinimumSeconds, Config.Round.ChaosMaximumSeconds)
 	task.wait(delay)
 	if state.Phase ~= "Trial" then return end
-	local events = { "GRAVITY_GLITCH", "BANANA_FLOOD", "EVERYONE_DANCES", "JUDGE_TINY", "POSITION_SWAP", "VOICE_LOSS", "EVIDENCE_MIXUP" }
+	local events = {
+		"GRAVITY_GLITCH", "BANANA_FLOOD", "EVERYONE_DANCES",
+		"JUDGE_TINY", "POSITION_SWAP", "VOICE_LOSS",
+		"EVIDENCE_MIXUP", "COURTROOM_FLOOD", "ROLE_SWAP", "BRAINROT_INVASION",
+	}
 	applyChaos(events[random:NextInteger(1, #events)])
 end
 
@@ -206,10 +281,49 @@ local function createSecurityNPCs()
 	return function() if folder.Parent then folder:Destroy() end end
 end
 
+local function spawnSpectatorNPCs()
+	local folder = Instance.new("Folder")
+	folder.Name = "CourtroomSpectatorNPCs"
+	folder.Parent = workspace
+	local specs = NPCSystem.CreateSpectators(6, random)
+	for i, spec in ipairs(specs) do
+		local part = Instance.new("Part")
+		part.Name = spec.Name
+		part.Size = Vector3.new(2, 3, 2)
+		part.Anchored = true
+		part.Position = Vector3.new(-20 + (i * 7), 4, -40)
+		part.Color = Color3.fromHSV(i / 6, 0.6, 0.8)
+		part.Parent = folder
+	end
+	return function() if folder.Parent then folder:Destroy() end end
+end
+
+local function triggerSpectatorReaction(reactionText)
+	local folder = workspace:FindFirstChild("CourtroomSpectatorNPCs")
+	if not folder then return end
+	for _, part in ipairs(folder:GetChildren()) do
+		local bg = Instance.new("BillboardGui")
+		bg.Size = UDim2.fromScale(4, 1.5)
+		bg.StudsOffset = Vector3.new(0, 2.5, 0)
+		bg.Adornee = part
+		bg.Parent = part
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.fromScale(1, 1)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.GothamBold
+		lbl.TextColor3 = Color3.fromRGB(255, 235, 100)
+		lbl.TextScaled = true
+		lbl.Text = reactionText
+		lbl.Parent = bg
+		task.delay(2.5, function() bg:Destroy() end)
+	end
+end
+
 local function triggerDramaticVerdict(verdict, defendantPlayer)
 	remotes.CosmeticEffect:FireAllClients("Verdict", verdict, defendantPlayer and defendantPlayer.UserId)
 
 	if verdict == "GUILTY" then
+		triggerSpectatorReaction("GASPS! GUILTY!")
 		if defendantPlayer and defendantPlayer.Character then
 			Animations.Play(defendantPlayer.Character, "CRY", 6)
 			task.delay(3, function()
@@ -219,15 +333,15 @@ local function triggerDramaticVerdict(verdict, defendantPlayer)
 			end)
 		end
 	else
-		-- NOT GUILTY: Confetti & dance
+		triggerSpectatorReaction("CHEERS! INNOCENT!")
 		local confetti = Instance.new("Folder")
 		confetti.Name = "VictoryConfetti"
 		confetti.Parent = workspace
-		for i = 1, 24 do
+		for i = 1, 28 do
 			local p = Instance.new("Part")
 			p.Size = Vector3.new(0.6, 0.6, 0.1)
-			p.Color = Color3.fromHSV(i / 24, 0.9, 1)
-			p.Position = Vector3.new(random:NextNumber(-15, 15), 18, random:NextNumber(-15, 15))
+			p.Color = Color3.fromHSV(i / 28, 0.9, 1)
+			p.Position = Vector3.new(random:NextNumber(-18, 18), 20, random:NextNumber(-18, 18))
 			p.CanCollide = false
 			p.Anchored = false
 			p.Parent = confetti
@@ -243,54 +357,129 @@ local function triggerDramaticVerdict(verdict, defendantPlayer)
 	end
 end
 
+local function computeEndAwards(verdict)
+	local awards = {}
+
+	-- 1. Best Lawyer Award
+	local bestSide = (state.ArgumentScores.Prosecutor >= state.ArgumentScores.Defense) and "Prosecutor" or "Defense"
+	for uId, role in pairs(state.Roles) do
+		if role == bestSide then
+			local p = Players:GetPlayerByUserId(uId)
+			if p then
+				table.insert(awards, { Title = "🏆 BEST LAWYER", Winner = p.DisplayName, Bonus = Config.Rewards.BestLawyer })
+				reward(p, Config.Rewards.BestLawyer, 30)
+			end
+		end
+	end
+
+	-- 2. Most Chaotic Player Award
+	local mostChaoticId, maxAbilities = nil, 0
+	for uId, count in pairs(activityTracker.AbilitiesUsed) do
+		if count > maxAbilities then
+			mostChaoticId, maxAbilities = uId, count
+		end
+	end
+	if mostChaoticId then
+		local p = Players:GetPlayerByUserId(mostChaoticId)
+		if p then
+			table.insert(awards, { Title = "⚡ MOST CHAOTIC", Winner = p.DisplayName, Bonus = Config.Rewards.MostChaotic })
+			reward(p, Config.Rewards.MostChaotic, 25)
+		end
+	end
+
+	-- 3. Longest Argument Award
+	if activityTracker.LongestArg.Player then
+		table.insert(awards, { Title = "📜 SILVER TONGUE", Winner = activityTracker.LongestArg.Player.DisplayName, Bonus = Config.Rewards.LongestArgument })
+		reward(activityTracker.LongestArg.Player, Config.Rewards.LongestArgument, 20)
+	end
+
+	state.Awards = awards
+end
+
 local function runRound()
 	local players = eligiblePlayers()
 	if #players < Config.MinPlayers then
 		waitPhase("Lobby", 3)
 		return
 	end
-	state.Roles = RoleAssigner.Assign(players, random)
+
+	-- Fair Role Assignment with history
+	state.Roles = RoleAssigner.Assign(players, random, roleHistory)
 	state.Case = CaseGenerator.Create(random)
 
-	-- Apply Judge's equipped theme if available
+	-- Update role history
+	for uId, role in pairs(state.Roles) do
+		roleHistory[uId] = roleHistory[uId] or { RoleCount = {} }
+		roleHistory[uId].LastRole = role
+		if role == "Judge" then
+			roleHistory[uId].JudgeCount = (roleHistory[uId].JudgeCount or 0) + 1
+		end
+	end
+
+	-- Activity tracker reset
+	activityTracker = { AbilitiesUsed = {}, LongestArg = { Player = nil, Length = 0 } }
+
+	-- Determine Judge's theme
 	local judgeTheme = "Classic"
 	for userId, role in pairs(state.Roles) do
 		if role == "Judge" then
 			local judgePlayer = Players:GetPlayerByUserId(userId)
 			local profile = judgePlayer and DataService.Get(judgePlayer)
 			if profile and profile.Equipped and profile.Equipped.Theme then
-				judgeTheme = profile.Equipped.Theme:gsub("theme_", "")
-				judgeTheme = judgeTheme:sub(1,1):upper() .. judgeTheme:sub(2)
+				local cleaned = profile.Equipped.Theme:gsub("theme_", "")
+				judgeTheme = cleaned:sub(1, 1):upper() .. cleaned:sub(2)
 			end
 		end
 	end
 	state.ActiveTheme = judgeTheme
 	MapBuilder.ApplyTheme(judgeTheme)
 
+	-- Bot fill for small servers
 	if #players < Config.TargetPlayers then
 		local bot = NPCSystem.CreateBotWitness(1, random)
-		bot.Lines = { "I observed the incident from a safe distance.", "My data says the story changed.", "I require more evidence." }
 		table.insert(state.Case.Witnesses, bot)
 	end
+
+	-- Witness memory creation
 	state.WitnessMemory = {}
 	for index, witness in ipairs(state.Case.Witnesses) do
 		state.WitnessMemory[index] = WitnessMemory.Create(witness, random)
 	end
+
 	state.Arguments, state.ArgumentScores, state.WitnessResponses = {}, { Prosecutor = 0, Defense = 0 }, {}
 	local cleanupSecurity = createSecurityNPCs()
+	local cleanupSpectators = spawnSpectatorNPCs()
+
 	state.Votes = {}
 	state.BotJuryCount = math.max(0, Config.TargetPlayers - #players)
+
 	teleportAll()
 	waitPhase("Briefing", Config.Round.BriefingSeconds)
 	if #eligiblePlayers() < Config.MinPlayers then cleanupRound(); return end
+
 	state.Phase, state.TimeLeft = "Trial", Config.Round.TrialSeconds
 	broadcast()
 	task.spawn(chaosLoop)
 
-	-- Record trial participation progression
+	-- Record trial participation
 	for _, p in ipairs(players) do
 		DataService.RecordProgress(p, "PLAY_TRIALS", 1)
 		DataService.RecordProgress(p, "FIRST_TRIAL", 1)
+	end
+
+	-- If low player count, bot lawyer auto-submits an argument
+	local hasProsecutor = false
+	for _, r in pairs(state.Roles) do if r == "Prosecutor" then hasProsecutor = true end end
+	if not hasProsecutor then
+		task.delay(15, function()
+			if state.Phase == "Trial" then
+				local botP = NPCSystem.CreateBotLawyer("Prosecutor", random)
+				local argText = botP.Arguments[random:NextInteger(1, #botP.Arguments)]
+				state.ArgumentScores.Prosecutor += 2
+				remotes.Notification:FireAllClients(botP.Name .. " submits argument: " .. argText)
+				broadcast()
+			end
+		end)
 	end
 
 	for _ = Config.Round.TrialSeconds, 1, -1 do
@@ -301,9 +490,13 @@ local function runRound()
 	end
 
 	waitPhase("Voting", Config.Round.VotingSeconds)
+
+	-- Intelligent Bot Jury voting based on arguments and evidence
+	local activeEvObj = state.ActiveEvidence and state.Case.Evidence[state.ActiveEvidence]
 	for index = 1, state.BotJuryCount do
-		state.Votes["BOT_JURY_" .. index] = random:NextNumber() > 0.45 and "GUILTY" or "NOT_GUILTY"
+		state.Votes["BOT_JURY_" .. index] = NPCSystem.EvaluateBotVote(state.ArgumentScores, activeEvObj, random)
 	end
+
 	local verdict, guilty, notGuilty = Verdict.Calculate(state.Votes, true, state.ArgumentScores)
 	if verdict == "TIE" then verdict = "NOT_GUILTY" end
 	if state.ReverseVerdict then verdict = verdict == "GUILTY" and "NOT_GUILTY" or "GUILTY" end
@@ -315,7 +508,12 @@ local function runRound()
 	end
 	triggerDramaticVerdict(verdict, defendantPlayer)
 
+	-- Compute end awards
+	computeEndAwards(verdict)
+
 	waitPhase("Verdict", Config.Round.VerdictSeconds)
+
+	-- Distribute rewards
 	for playerUserId, role in pairs(state.Roles) do
 		local instance = Players:GetPlayerByUserId(playerUserId)
 		if instance then
@@ -339,8 +537,10 @@ local function runRound()
 			end
 		end
 	end
-	waitPhase("Rewards", 8)
+
+	waitPhase("Rewards", Config.Round.RewardsSeconds)
 	cleanupSecurity()
+	cleanupSpectators()
 	cleanupRound()
 end
 
@@ -349,7 +549,7 @@ local function canUseAbility(player, name)
 	cooldowns[player.UserId] = cooldowns[player.UserId] or {}
 	local now = os.clock()
 	if (cooldowns[player.UserId][name] or 0) > now then return false end
-	cooldowns[player.UserId][name] = now + 20
+	cooldowns[player.UserId][name] = now + 18
 	return true
 end
 
@@ -367,10 +567,20 @@ function RoundService.Start(remoteFolder, dataService)
 	}
 	DataService = dataService
 
-	-- Setup real-time player data sync
 	DataService.SetSyncCallback(function(player, profile)
 		if remotes.PlayerData and player.Parent then
 			remotes.PlayerData:FireClient(player, profile)
+		end
+	end)
+
+	-- Handle late joining
+	Players.PlayerAdded:Connect(function(player)
+		task.wait(1)
+		if state.Phase ~= "Lobby" and not state.Roles[player.UserId] then
+			state.Roles[player.UserId] = "Spectator"
+			teleport(player, "Spectator")
+			remotes.Notification:FireClient(player, "Welcome! You are spectating the active trial.")
+			broadcast()
 		end
 	end)
 
@@ -385,7 +595,7 @@ function RoundService.Start(remoteFolder, dataService)
 				remotes.Notification:FireClient(player, "PURCHASE FAILED: " .. tostring(result))
 			end
 		elseif action == "EquipItem" and type(payload) == "table" and type(payload.Category) == "string" and type(payload.ItemId) == "string" then
-			local success, err = DataService.EquipItem(player, payload.Category, payload.ItemId)
+			local success = DataService.EquipItem(player, payload.Category, payload.ItemId)
 			if success then
 				remotes.Notification:FireClient(player, "EQUIPPED: " .. payload.ItemId)
 				remotes.CosmeticEffect:FireClient(player, "Sound", "EquipItem")
@@ -412,10 +622,13 @@ function RoundService.Start(remoteFolder, dataService)
 			if validEmotes[payload] and player.Character then
 				Animations.Play(player.Character, payload, 2.5)
 				remotes.CosmeticEffect:FireAllClients("Emote", player.UserId, payload)
+				activityTracker.AbilitiesUsed[player.UserId] = (activityTracker.AbilitiesUsed[player.UserId] or 0) + 1
 				if payload == "OBJECTION" then
 					remotes.CosmeticEffect:FireAllClients("Sound", "Objection")
+					triggerSpectatorReaction("OBJECTION?!")
 				elseif payload == "GAVEL_SLAM" then
 					remotes.CosmeticEffect:FireAllClients("Sound", "GavelSlam")
+					triggerSpectatorReaction("ORDER!")
 				end
 			end
 		elseif action == "SelectTheme" and state.Roles[player.UserId] == "Judge" and type(payload) == "string" then
@@ -438,8 +651,10 @@ function RoundService.Start(remoteFolder, dataService)
 			state.ActiveEvidence = payload
 			state.EvidenceInspection = EvidenceSystem.Present(state.Case, payload, player.DisplayName)
 			DataService.RecordProgress(player, "PRESENT_EVIDENCE", 1)
+			activityTracker.AbilitiesUsed[player.UserId] = (activityTracker.AbilitiesUsed[player.UserId] or 0) + 1
 			remotes.Notification:FireAllClients(player.DisplayName .. " presents evidence: " .. state.Case.Evidence[payload].Name)
 			if player.Character then Animations.Play(player.Character, "OBJECTION", 2) end
+			triggerSpectatorReaction("Gasp! Evidence!")
 			broadcast()
 		elseif action == "InspectEvidence" and state.Phase == "Trial" and validEvidence(payload) then
 			state.EvidenceInspection = EvidenceSystem.Inspect(state.Case, payload)
@@ -455,6 +670,7 @@ function RoundService.Start(remoteFolder, dataService)
 			if contradiction then
 				DataService.RecordProgress(player, "CONTRADICTION_HUNTER", 1)
 				remotes.CosmeticEffect:FireAllClients("Sound", "Objection")
+				triggerSpectatorReaction("CONTRADICTION!!")
 			end
 			remotes.Notification:FireAllClients(witness.Name .. " answers: " .. answer .. (contradiction and " [CONTRADICTION DETECTED]" or ""))
 			broadcast()
@@ -467,30 +683,62 @@ function RoundService.Start(remoteFolder, dataService)
 			table.insert(state.Arguments, result)
 			state.ArgumentScores[side] += result.Score
 			DataService.RecordProgress(player, "SUBMIT_ARGUMENTS", 1)
+			activityTracker.AbilitiesUsed[player.UserId] = (activityTracker.AbilitiesUsed[player.UserId] or 0) + 1
+
+			if #payload > activityTracker.LongestArg.Length then
+				activityTracker.LongestArg = { Player = player, Length = #payload }
+			end
+
 			if player.Character then Animations.Play(player.Character, "OBJECTION", 2.2) end
 			remotes.Notification:FireAllClients(player.DisplayName .. " submits an argument (score " .. tostring(result.Score) .. ").")
 			broadcast()
 		elseif action == "Accuse" and state.Roles[player.UserId] == "Prosecutor" and state.Phase == "Trial" then
 			if player.Character then Animations.Play(player.Character, "OBJECTION", 2.5) end
+			triggerSpectatorReaction("SHOCKING ACCUSATION!")
 			remotes.Notification:FireAllClients("The prosecutor points dramatically: ACCUSATION FILED!")
 		elseif action == "DefendantStatement" and state.Roles[player.UserId] == "Defendant" and state.Phase == "Trial" then
 			remotes.Notification:FireAllClients("The defendant gives a statement.")
 		elseif action == "JudgePower" and canUseAbility(player, tostring(payload)) then
 			local name = tostring(payload)
 			DataService.RecordProgress(player, "JUDGE_POWERS", 1)
+			activityTracker.AbilitiesUsed[player.UserId] = (activityTracker.AbilitiesUsed[player.UserId] or 0) + 1
 			if player.Character then Animations.Play(player.Character, "GAVEL_SLAM", 2) end
-			if name == "THROW_BANANA" then local cleanup = spawnBananas(); task.delay(3, cleanup)
-			elseif name == "ORDER_SILENCE" then state.Silenced = true; task.delay(5, function() state.Silenced = false; broadcast() end)
+
+			if name == "THROW_BANANA" then
+				local cleanup = spawnBananas()
+				task.delay(4, cleanup)
+			elseif name == "ORDER_SILENCE" then
+				state.Silenced = true
+				triggerSpectatorReaction("Silence in court!")
+				task.delay(6, function() state.Silenced = false; broadcast() end)
 			elseif name == "SUMMON_SECURITY" then
-				for userId, role in pairs(state.Roles) do if role == "Defendant" then local defendant = Players:GetPlayerByUserId(userId); if defendant then teleport(defendant, "Jail") end end end
+				for userId, role in pairs(state.Roles) do
+					if role == "Defendant" then
+						local defendant = Players:GetPlayerByUserId(userId)
+						if defendant then teleport(defendant, "Jail") end
+					end
+				end
+				triggerSpectatorReaction("Security, detain them!")
 				remotes.Notification:FireAllClients("Security escorts the defendant to jail!")
-			elseif name == "FORCE_CONFESSION" then state.ConfessionRequired = true; remotes.Notification:FireAllClients("The defendant must choose: confess or deny!")
-			elseif name == "REVERSE_VERDICT" then state.ReverseVerdict = true end
-			remotes.Notification:FireAllClients("JUDGE POWER: " .. name:gsub("_", " ")); broadcast()
+			elseif name == "FORCE_CONFESSION" then
+				state.ConfessionRequired = true
+				remotes.Notification:FireAllClients("The defendant must choose: confess or deny!")
+			elseif name == "REVERSE_VERDICT" then
+				state.ReverseVerdict = true
+			elseif name == "COURTROOM_EXPLOSION" then
+				remotes.CosmeticEffect:FireAllClients("Sound", "VerdictGuilty")
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p.Character then Animations.Play(p.Character, "CRY", 3) end
+				end
+				remotes.Notification:FireAllClients("💥 EXPLOSION IN THE COURTROOM! ORDER HAS VANISHED!")
+			end
+			remotes.Notification:FireAllClients("JUDGE POWER: " .. name:gsub("_", " "))
+			broadcast()
 		elseif action == "DefendantResponse" and state.Roles[player.UserId] == "Defendant" and state.Phase == "Trial" and state.ConfessionRequired and (payload == "CONFESS" or payload == "DENY") then
 			state.Confession = payload
 			if payload == "CONFESS" and player.Character then
 				Animations.Play(player.Character, "CRY", 3)
+				triggerSpectatorReaction("A FULL CONFESSION?!")
 			end
 			remotes.Notification:FireAllClients("The defendant chooses to " .. payload:lower() .. ".")
 			broadcast()
@@ -501,12 +749,32 @@ function RoundService.Start(remoteFolder, dataService)
 			broadcast()
 		end
 	end)
+
+	-- Disconnect handling
 	Players.PlayerRemoving:Connect(function(player)
 		cooldowns[player.UserId] = nil
 		emoteCooldowns[player.UserId] = nil
+		local role = state.Roles[player.UserId]
 		state.Roles[player.UserId], state.Votes[player.UserId] = nil, nil
+
+		-- If Judge disconnects during Trial, promote highest ranking available juror
+		if role == "Judge" and state.Phase == "Trial" then
+			for uId, r in pairs(state.Roles) do
+				if r == "Jury" then
+					state.Roles[uId] = "Judge"
+					local actingJudge = Players:GetPlayerByUserId(uId)
+					if actingJudge then
+						teleport(actingJudge, "Judge")
+						remotes.Notification:FireAllClients(actingJudge.DisplayName .. " has been sworn in as Acting Judge!")
+					end
+					break
+				end
+			end
+		end
+
 		if state.Phase == "Voting" then broadcast() end
 	end)
+
 	task.spawn(function()
 		while true do runRound() end
 	end)

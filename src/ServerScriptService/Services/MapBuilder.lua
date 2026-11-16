@@ -86,6 +86,8 @@ function MapBuilder.Build()
 		carpet = Color3.fromRGB(160, 30, 45),
 		accent = Color3.fromRGB(255, 105, 180),
 		marble = Color3.fromRGB(240, 240, 245),
+		neonGreen = Color3.fromRGB(50, 255, 120),
+		neonPurple = Color3.fromRGB(180, 50, 255),
 	}
 
 	-- ==================== COURTROOM CHAMBER ====================
@@ -124,7 +126,7 @@ function MapBuilder.Build()
 		light(chandelier, Color3.fromRGB(255, 240, 200), 1.8, 45)
 	end
 
-	-- ==================== JUDGE'S BENCH ====================
+	-- ==================== JUDGE'S BENCH & GAVEL ====================
 	part(map, "JudgePlatform", Vector3.new(36, 5, 18), Vector3.new(0, 4.5, 36), c.darkWood, Enum.Material.Wood)
 	part(map, "JudgeStairs", Vector3.new(14, 2.5, 6), Vector3.new(0, 1.5, 25), c.darkWood, Enum.Material.WoodPlanks)
 	local bench = part(map, "JudgeBench", Vector3.new(28, 8, 4), Vector3.new(0, 10, 30), c.wood, Enum.Material.WoodPlanks)
@@ -214,7 +216,7 @@ function MapBuilder.Build()
 		part(map, "JurySeat2_" .. col, Vector3.new(4, 2.5, 4), Vector3.new(-44 + col * 4, 6, -29), c.cream, Enum.Material.Fabric)
 	end
 
-	-- ==================== SPECTATOR GALLERY ====================
+	-- ==================== SPECTATOR GALLERY & BALCONY ====================
 	part(map, "GalleryDivider", Vector3.new(80, 4, 1), Vector3.new(10, 3, -32), c.darkWood, Enum.Material.Wood)
 	for row = 1, 3 do
 		for col = -1, 2 do
@@ -222,8 +224,16 @@ function MapBuilder.Build()
 		end
 	end
 
+	-- Elevated Spectator Balcony
+	part(map, "BalconyFloor", Vector3.new(120, 2, 18), Vector3.new(0, 22, -45), c.darkWood, Enum.Material.WoodPlanks)
+	part(map, "BalconyRailing", Vector3.new(120, 4, 1), Vector3.new(0, 25, -36), c.gold, Enum.Material.Metal)
+	for col = -2, 2 do
+		part(map, "BalconyBench_" .. col, Vector3.new(18, 2.8, 3.5), Vector3.new(col * 24, 24, -45), c.wood, Enum.Material.WoodPlanks)
+	end
+
 	-- ==================== EVIDENCE ROOM & PEDESTALS ====================
 	part(map, "EvidenceRoom", Vector3.new(28, 18, 2), Vector3.new(48, 9, -42), c.wood, Enum.Material.Wood)
+	part(map, "EvidenceLocker", Vector3.new(6, 12, 16), Vector3.new(61, 8, -42), Color3.fromRGB(70, 75, 85), Enum.Material.Metal)
 	for index = 1, 4 do
 		local ex = 42 + (index % 2) * 10
 		local ez = -36 + math.floor(index / 2) * 9
@@ -236,6 +246,108 @@ function MapBuilder.Build()
 		prompt.HoldDuration = 0.2
 		prompt.Parent = pedestal
 	end
+
+	-- Secret Lab Trapdoor in Evidence Room
+	local trapDoor = part(map, "SecretTrapdoor", Vector3.new(5, 0.4, 5), Vector3.new(52, 0.2, -49), Color3.fromRGB(45, 45, 55), Enum.Material.DiamondPlate)
+	local trapPrompt = Instance.new("ProximityPrompt")
+	trapPrompt.ActionText = "Enter Secret Lab"
+	trapPrompt.ObjectText = "Mysterious Hatch"
+	trapPrompt.HoldDuration = 0.3
+	trapPrompt.Parent = trapDoor
+	trapPrompt.Triggered:Connect(function(player)
+		local char = player.Character
+		if char then char:PivotTo(CFrame.new(0, -10, -40)) end
+	end)
+
+	-- ==================== SECRET BRAINROT LABORATORY ====================
+	local labFolder = Instance.new("Folder")
+	labFolder.Name = "SecretBrainrotLaboratory"
+	labFolder.Parent = map
+
+	part(labFolder, "LabFloor", Vector3.new(40, 2, 40), Vector3.new(0, -12, -40), Color3.fromRGB(30, 25, 42), Enum.Material.DiamondPlate)
+	part(labFolder, "LabWallBack", Vector3.new(40, 16, 2), Vector3.new(0, -4, -60), Color3.fromRGB(45, 40, 60), Enum.Material.Metal)
+	part(labFolder, "LabWallFront", Vector3.new(40, 16, 2), Vector3.new(0, -4, -20), Color3.fromRGB(45, 40, 60), Enum.Material.Metal)
+	part(labFolder, "LabWallLeft", Vector3.new(2, 16, 40), Vector3.new(-20, -4, -40), Color3.fromRGB(45, 40, 60), Enum.Material.Metal)
+	part(labFolder, "LabWallRight", Vector3.new(2, 16, 40), Vector3.new(20, -4, -40), Color3.fromRGB(45, 40, 60), Enum.Material.Metal)
+
+	-- Glowing Radioactive Vats
+	local vat1 = part(labFolder, "RadioactiveVat1", Vector3.new(6, 10, 6), Vector3.new(-12, -7, -50), c.neonGreen, Enum.Material.Neon)
+	vat1.Shape = Enum.PartType.Cylinder
+	light(vat1, c.neonGreen, 1.8, 18)
+
+	local vat2 = part(labFolder, "RadioactiveVat2", Vector3.new(6, 10, 6), Vector3.new(12, -7, -50), c.neonPurple, Enum.Material.Neon)
+	vat2.Shape = Enum.PartType.Cylinder
+	light(vat2, c.neonPurple, 1.8, 18)
+
+	-- Experimental Brainrot Lever
+	local leverBase = part(labFolder, "LeverBase", Vector3.new(3, 2, 3), Vector3.new(0, -10, -52), Color3.fromRGB(60, 60, 70), Enum.Material.Metal)
+	local leverHandle = part(labFolder, "LeverHandle", Vector3.new(0.5, 3, 0.5), Vector3.new(0, -8, -52), Color3.fromRGB(255, 60, 60), Enum.Material.Neon)
+	local leverPrompt = Instance.new("ProximityPrompt")
+	leverPrompt.ActionText = "PULL EXPERIMENTAL LEVER"
+	leverPrompt.ObjectText = "Brainrot Reactor"
+	leverPrompt.HoldDuration = 0.5
+	leverPrompt.Parent = leverHandle
+
+	local leverDebounce = false
+	leverPrompt.Triggered:Connect(function(player)
+		if leverDebounce then return end
+		leverDebounce = true
+		local siren = Instance.new("Sound")
+		siren.SoundId = "rbxasset://sounds/electronicpingshort.wav"
+		siren.Volume = 1.2
+		siren.PlaybackSpeed = 0.5
+		siren.Parent = leverHandle
+		siren:Play()
+
+		TweenService:Create(leverHandle, TweenInfo.new(0.2), { Orientation = Vector3.new(45, 0, 0) }):Play()
+		task.wait(1.5)
+		TweenService:Create(leverHandle, TweenInfo.new(0.3), { Orientation = Vector3.new(0, 0, 0) }):Play()
+		leverDebounce = false
+	end)
+
+	-- Ladder back to Courtroom
+	local ladderExit = part(labFolder, "LabExitLadder", Vector3.new(4, 12, 1), Vector3.new(16, -6, -22), c.gold, Enum.Material.Metal)
+	local exitPrompt = Instance.new("ProximityPrompt")
+	exitPrompt.ActionText = "Climb to Courtroom"
+	exitPrompt.ObjectText = "Ladder"
+	exitPrompt.HoldDuration = 0.2
+	exitPrompt.Parent = ladderExit
+	exitPrompt.Triggered:Connect(function(player)
+		local char = player.Character
+		if char then char:PivotTo(CFrame.new(48, 5, -42)) end
+	end)
+
+	-- ==================== JUDGE'S PRIVATE CHAMBERS ====================
+	local chambers = Instance.new("Folder")
+	chambers.Name = "JudgeChambers"
+	chambers.Parent = map
+
+	part(chambers, "ChambersFloor", Vector3.new(44, 2, 28), Vector3.new(0, 0, 72), Color3.fromRGB(65, 45, 30), Enum.Material.WoodPlanks)
+	part(chambers, "ChambersWallBack", Vector3.new(44, 24, 2), Vector3.new(0, 12, 86), c.darkWood, Enum.Material.Wood)
+	part(chambers, "ChambersWallLeft", Vector3.new(2, 24, 28), Vector3.new(-22, 12, 72), c.darkWood, Enum.Material.Wood)
+	part(chambers, "ChambersWallRight", Vector3.new(2, 24, 28), Vector3.new(22, 12, 72), c.darkWood, Enum.Material.Wood)
+
+	-- Executive Desk & Bookcases
+	part(chambers, "ExecutiveDesk", Vector3.new(14, 4.5, 7), Vector3.new(0, 3, 76), c.darkWood, Enum.Material.Wood)
+	part(chambers, "DeskChair", Vector3.new(5, 7, 5), Vector3.new(0, 4.5, 81), Color3.fromRGB(120, 30, 40), Enum.Material.Fabric)
+	part(chambers, "Bookcase1", Vector3.new(16, 14, 3), Vector3.new(-12, 8, 84), c.wood, Enum.Material.Wood)
+	part(chambers, "Bookcase2", Vector3.new(16, 14, 3), Vector3.new(12, 8, 84), c.wood, Enum.Material.Wood)
+
+	-- Interactive Coffee Machine
+	local coffeeMaker = part(chambers, "CoffeeMaker", Vector3.new(2, 2.5, 2), Vector3.new(-5, 5.8, 76), Color3.fromRGB(40, 40, 45), Enum.Material.Metal)
+	local coffeePrompt = Instance.new("ProximityPrompt")
+	coffeePrompt.ActionText = "Brew Dark Roast Coffee"
+	coffeePrompt.ObjectText = "Judge's Espresso Maker"
+	coffeePrompt.HoldDuration = 0.3
+	coffeePrompt.Parent = coffeeMaker
+	coffeePrompt.Triggered:Connect(function(player)
+		local pourSound = Instance.new("Sound")
+		pourSound.SoundId = "rbxasset://sounds/action_swim.mp3"
+		pourSound.Volume = 0.8
+		pourSound.PlaybackSpeed = 1.6
+		pourSound.Parent = coffeeMaker
+		pourSound:Play()
+	end)
 
 	-- ==================== JAIL CELL ====================
 	part(map, "JailRoom", Vector3.new(28, 18, 2), Vector3.new(-48, 9, -42), c.darkWood, Enum.Material.Metal)
@@ -254,23 +366,23 @@ function MapBuilder.Build()
 	end)
 
 	-- ==================== GRAND LOBBY ====================
-	part(map, "LobbyFloor", Vector3.new(110, 2, 60), Vector3.new(0, 0, 95), Color3.fromRGB(40, 45, 60), Enum.Material.Marble)
-	part(map, "LobbyWallBack", Vector3.new(110, 30, 2), Vector3.new(0, 15, 125), c.darkWood, Enum.Material.Wood)
-	part(map, "LobbyWallLeft", Vector3.new(2, 30, 60), Vector3.new(-55, 15, 95), c.darkWood, Enum.Material.Wood)
-	part(map, "LobbyWallRight", Vector3.new(2, 30, 60), Vector3.new(55, 15, 95), c.darkWood, Enum.Material.Wood)
+	part(map, "LobbyFloor", Vector3.new(110, 2, 60), Vector3.new(0, 0, 125), Color3.fromRGB(40, 45, 60), Enum.Material.Marble)
+	part(map, "LobbyWallBack", Vector3.new(110, 30, 2), Vector3.new(0, 15, 155), c.darkWood, Enum.Material.Wood)
+	part(map, "LobbyWallLeft", Vector3.new(2, 30, 60), Vector3.new(-55, 15, 125), c.darkWood, Enum.Material.Wood)
+	part(map, "LobbyWallRight", Vector3.new(2, 30, 60), Vector3.new(55, 15, 125), c.darkWood, Enum.Material.Wood)
 
 	-- Archway dividing Lobby and Courtroom
-	local archLeft = part(map, "ArchLeft", Vector3.new(4, 25, 4), Vector3.new(-16, 13, 65), c.gold, Enum.Material.Metal)
-	local archRight = part(map, "ArchRight", Vector3.new(4, 25, 4), Vector3.new(16, 13, 65), c.gold, Enum.Material.Metal)
-	local archTop = part(map, "ArchTop", Vector3.new(36, 4, 4), Vector3.new(0, 25, 65), c.gold, Enum.Material.Metal)
+	local archLeft = part(map, "ArchLeft", Vector3.new(4, 25, 4), Vector3.new(-16, 13, 95), c.gold, Enum.Material.Metal)
+	local archRight = part(map, "ArchRight", Vector3.new(4, 25, 4), Vector3.new(16, 13, 95), c.gold, Enum.Material.Metal)
+	local archTop = part(map, "ArchTop", Vector3.new(36, 4, 4), Vector3.new(0, 25, 95), c.gold, Enum.Material.Metal)
 	light(archTop, Color3.fromRGB(255, 215, 0), 2.0, 30)
 
 	-- Reception Desk
-	local reception = part(map, "ReceptionDesk", Vector3.new(22, 5, 6), Vector3.new(0, 3.5, 115), c.wood, Enum.Material.WoodPlanks)
-	part(map, "ReceptionCounter", Vector3.new(24, 0.8, 7), Vector3.new(0, 6.2, 115), c.marble, Enum.Material.Marble)
+	local reception = part(map, "ReceptionDesk", Vector3.new(22, 5, 6), Vector3.new(0, 3.5, 145), c.wood, Enum.Material.WoodPlanks)
+	part(map, "ReceptionCounter", Vector3.new(24, 0.8, 7), Vector3.new(0, 6.2, 145), c.marble, Enum.Material.Marble)
 
 	-- Matchmaking Status Billboard
-	local billboardPart = part(map, "MatchmakingBillboard", Vector3.new(28, 12, 1), Vector3.new(0, 18, 123.8), Color3.fromRGB(20, 20, 25), Enum.Material.SmoothPlastic)
+	local billboardPart = part(map, "MatchmakingBillboard", Vector3.new(28, 12, 1), Vector3.new(0, 18, 153.8), Color3.fromRGB(20, 20, 25), Enum.Material.SmoothPlastic)
 	local surfaceGui = Instance.new("SurfaceGui")
 	surfaceGui.Name = "StatusBoard"
 	surfaceGui.Face = Enum.NormalId.Front
@@ -312,12 +424,12 @@ function MapBuilder.Build()
 	bTip.Parent = frame
 
 	-- Waiting Lounge: Sofas & Coffee Table
-	part(map, "Sofa1", Vector3.new(16, 3, 5), Vector3.new(-32, 2.5, 95), Color3.fromRGB(150, 40, 50), Enum.Material.Fabric)
-	part(map, "Sofa1_Back", Vector3.new(16, 5, 1.5), Vector3.new(-32, 4.5, 97), Color3.fromRGB(130, 35, 45), Enum.Material.Fabric)
-	part(map, "CoffeeTable", Vector3.new(10, 2, 5), Vector3.new(-32, 2, 88), c.wood, Enum.Material.WoodPlanks)
+	part(map, "Sofa1", Vector3.new(16, 3, 5), Vector3.new(-32, 2.5, 125), Color3.fromRGB(150, 40, 50), Enum.Material.Fabric)
+	part(map, "Sofa1_Back", Vector3.new(16, 5, 1.5), Vector3.new(-32, 4.5, 127), Color3.fromRGB(130, 35, 45), Enum.Material.Fabric)
+	part(map, "CoffeeTable", Vector3.new(10, 2, 5), Vector3.new(-32, 2, 118), c.wood, Enum.Material.WoodPlanks)
 
 	-- Interactive Water Cooler
-	local cooler = part(map, "WaterCooler", Vector3.new(2.5, 5, 2.5), Vector3.new(-46, 3.5, 115), Color3.fromRGB(220, 230, 245), Enum.Material.Glass)
+	local cooler = part(map, "WaterCooler", Vector3.new(2.5, 5, 2.5), Vector3.new(-46, 3.5, 145), Color3.fromRGB(220, 230, 245), Enum.Material.Glass)
 	local coolerPrompt = Instance.new("ProximityPrompt")
 	coolerPrompt.ActionText = "Drink Cold Water"
 	coolerPrompt.ObjectText = "Water Dispenser"
@@ -333,13 +445,13 @@ function MapBuilder.Build()
 	end)
 
 	-- Top Lawyers Leaderboard Podium (3-tiered)
-	local p1 = part(map, "Podium_1st", Vector3.new(6, 4.5, 6), Vector3.new(34, 3, 95), c.gold, Enum.Material.Metal)
-	local p2 = part(map, "Podium_2nd", Vector3.new(5, 3.2, 5), Vector3.new(27, 2.4, 95), Color3.fromRGB(190, 195, 205), Enum.Material.Metal)
-	local p3 = part(map, "Podium_3rd", Vector3.new(5, 2.2, 5), Vector3.new(41, 1.9, 95), Color3.fromRGB(180, 115, 60), Enum.Material.Metal)
+	part(map, "Podium_1st", Vector3.new(6, 4.5, 6), Vector3.new(34, 3, 125), c.gold, Enum.Material.Metal)
+	part(map, "Podium_2nd", Vector3.new(5, 3.2, 5), Vector3.new(27, 2.4, 125), Color3.fromRGB(190, 195, 205), Enum.Material.Metal)
+	part(map, "Podium_3rd", Vector3.new(5, 2.2, 5), Vector3.new(41, 1.9, 125), Color3.fromRGB(180, 115, 60), Enum.Material.Metal)
 
 	-- Interactive Practice Witness Dummy
-	local dummy = part(map, "PracticeDummy", Vector3.new(3, 5, 2), Vector3.new(34, 4, 115), Color3.fromRGB(255, 180, 120), Enum.Material.Wood)
-	local dummyHead = part(map, "PracticeDummyHead", Vector3.new(2, 2, 2), Vector3.new(34, 7.5, 115), Color3.fromRGB(255, 210, 77), Enum.Material.SmoothPlastic)
+	local dummy = part(map, "PracticeDummy", Vector3.new(3, 5, 2), Vector3.new(34, 4, 145), Color3.fromRGB(255, 180, 120), Enum.Material.Wood)
+	local dummyHead = part(map, "PracticeDummyHead", Vector3.new(2, 2, 2), Vector3.new(34, 7.5, 145), Color3.fromRGB(255, 210, 77), Enum.Material.SmoothPlastic)
 	dummyHead.Shape = Enum.PartType.Ball
 	local dummyPrompt = Instance.new("ProximityPrompt")
 	dummyPrompt.ActionText = "Cross-Examine Dummy"
@@ -381,7 +493,7 @@ function MapBuilder.Build()
 	end)
 
 	-- ==================== SPAWNS ====================
-	spawn(map, "LobbySpawn", Vector3.new(0, 4, 95))
+	spawn(map, "LobbySpawn", Vector3.new(0, 4, 125))
 	spawn(map, "CourtroomSpawn", Vector3.new(0, 4, 0))
 
 	for role, position in pairs({

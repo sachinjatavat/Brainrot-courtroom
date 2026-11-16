@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
@@ -25,7 +24,7 @@ local cosmeticEffectRemote = remotes:WaitForChild("CourtroomCosmeticEffect")
 
 -- Client Local State
 local localProfile = {
-	Braincoins = 0, XP = 0, Level = 1,
+	Braincoins = 0, XP = 0, Level = 1, Wins = 0, TrialsPlayed = 0,
 	Unlocked = { "gavel_wood", "case_leather", "title_rookie", "theme_classic" },
 	Equipped = { Gavel = "gavel_wood", Briefcase = "case_leather", Aura = "none", Title = "title_rookie", Theme = "theme_classic" },
 	DailyMissions = { Day = 0, Progress = {}, Claimed = {} },
@@ -37,6 +36,7 @@ local clientSettings = {
 	ScreenShake = true,
 }
 local lastState = {}
+local currentDisplayedPhase = ""
 
 -- Sound helper
 local function playSFX(name)
@@ -49,7 +49,6 @@ local function shakeCamera(intensity, duration)
 	if not clientSettings.ScreenShake then return end
 	task.spawn(function()
 		local startTime = os.clock()
-		local originalCFrame = camera.CFrame
 		while os.clock() - startTime < (duration or 0.3) do
 			local offset = Vector3.new(
 				(math.random() - 0.5) * (intensity or 0.5),
@@ -80,8 +79,8 @@ local uiScale = Instance.new("UIScale")
 uiScale.Parent = root
 local function updateScale()
 	local viewport = camera.ViewportSize
-	if viewport.X < 700 then
-		uiScale.Scale = math.clamp(viewport.X / 750, 0.75, 1)
+	if viewport.X < 750 then
+		uiScale.Scale = math.clamp(viewport.X / 800, 0.70, 1)
 	else
 		uiScale.Scale = 1
 	end
@@ -145,7 +144,7 @@ pad.Parent = topBar
 
 -- Coin Counter
 local coinPill = Instance.new("Frame")
-coinPill.Size = UDim2.new(0, 140, 0, 36)
+coinPill.Size = UDim2.new(0, 130, 0, 36)
 coinPill.BackgroundColor3 = Color3.fromRGB(38, 28, 56)
 coinPill.Parent = topBar
 rounded(coinPill, 10)
@@ -161,7 +160,7 @@ coinLabel.Parent = coinPill
 
 -- Level & XP Pill
 local xpPill = Instance.new("Frame")
-xpPill.Size = UDim2.new(0, 150, 0, 36)
+xpPill.Size = UDim2.new(0, 140, 0, 36)
 xpPill.BackgroundColor3 = Color3.fromRGB(38, 28, 56)
 xpPill.Parent = topBar
 rounded(xpPill, 10)
@@ -177,7 +176,7 @@ xpLabel.Parent = xpPill
 
 -- Title Pill
 local titlePill = Instance.new("Frame")
-titlePill.Size = UDim2.new(0, 160, 0, 36)
+titlePill.Size = UDim2.new(0, 150, 0, 36)
 titlePill.BackgroundColor3 = Color3.fromRGB(38, 28, 56)
 titlePill.Parent = topBar
 rounded(titlePill, 10)
@@ -193,25 +192,26 @@ titleLabel.Parent = titlePill
 
 -- Spacer
 local spacer = Instance.new("Frame")
-spacer.Size = UDim2.new(0, 10, 0, 0)
+spacer.Size = UDim2.new(0, 8, 0, 0)
 spacer.BackgroundTransparency = 1
 spacer.Parent = topBar
 
 -- Nav Buttons
 local function navButton(iconText, callback)
 	local container = Instance.new("Frame")
-	container.Size = UDim2.new(0, 100, 0, 36)
+	container.Size = UDim2.new(0, 95, 0, 36)
 	container.BackgroundTransparency = 1
 	container.Parent = topBar
 	createButton(container, iconText, Color3.fromRGB(60, 42, 85), Color3.fromRGB(255, 240, 210), callback)
 end
 
-local shopModal, missionsModal, emotesModal, settingsModal
+local shopModal, missionsModal, emotesModal, profileModal, settingsModal
 
 navButton("🛒 SHOP", function()
 	shopModal.Visible = not shopModal.Visible
 	missionsModal.Visible = false
 	emotesModal.Visible = false
+	profileModal.Visible = false
 	settingsModal.Visible = false
 end)
 
@@ -219,6 +219,7 @@ navButton("📋 MISSIONS", function()
 	missionsModal.Visible = not missionsModal.Visible
 	shopModal.Visible = false
 	emotesModal.Visible = false
+	profileModal.Visible = false
 	settingsModal.Visible = false
 end)
 
@@ -226,6 +227,15 @@ navButton("🎭 EMOTES", function()
 	emotesModal.Visible = not emotesModal.Visible
 	shopModal.Visible = false
 	missionsModal.Visible = false
+	profileModal.Visible = false
+	settingsModal.Visible = false
+end)
+
+navButton("👤 PROFILE", function()
+	profileModal.Visible = not profileModal.Visible
+	shopModal.Visible = false
+	missionsModal.Visible = false
+	emotesModal.Visible = false
 	settingsModal.Visible = false
 end)
 
@@ -234,6 +244,7 @@ navButton("⚙️ SETTINGS", function()
 	shopModal.Visible = false
 	missionsModal.Visible = false
 	emotesModal.Visible = false
+	profileModal.Visible = false
 end)
 
 -- ==================== TRIAL STATUS BANNER ====================
@@ -241,7 +252,7 @@ local statusPanel = Instance.new("Frame")
 statusPanel.Name = "StatusPanel"
 statusPanel.AnchorPoint = Vector2.new(0.5, 0)
 statusPanel.Position = UDim2.fromScale(0.5, 0.08)
-statusPanel.Size = UDim2.new(0.7, 0, 0, 90)
+statusPanel.Size = UDim2.new(0.72, 0, 0, 92)
 statusPanel.BackgroundColor3 = Color3.fromRGB(24, 18, 36)
 statusPanel.BackgroundTransparency = 0.12
 statusPanel.Parent = root
@@ -289,7 +300,7 @@ local actionBar = Instance.new("Frame")
 actionBar.Name = "ActionBar"
 actionBar.AnchorPoint = Vector2.new(0.5, 1)
 actionBar.Position = UDim2.fromScale(0.5, 0.98)
-actionBar.Size = UDim2.new(0.92, 0, 0, 120)
+actionBar.Size = UDim2.new(0.94, 0, 0, 120)
 actionBar.BackgroundTransparency = 1
 actionBar.Parent = root
 
@@ -304,7 +315,7 @@ local function actionBtn(text, color, callback)
 	local container = Instance.new("Frame")
 	container.BackgroundTransparency = 1
 	container.Parent = actionBar
-	local b = createButton(container, text, color, Color3.fromRGB(25, 18, 36), callback)
+	createButton(container, text, color, Color3.fromRGB(25, 18, 36), callback)
 	return container
 end
 
@@ -326,6 +337,7 @@ local denyBtn = actionBtn("DENY", Color3.fromRGB(100, 235, 120), function() acti
 local silenceBtn = actionBtn("ORDER SILENCE", Color3.fromRGB(255, 210, 77), function() actionRemote:FireServer("JudgePower", "ORDER_SILENCE") end)
 local bananaBtn = actionBtn("BANANA FLOOD", Color3.fromRGB(255, 225, 60), function() actionRemote:FireServer("JudgePower", "THROW_BANANA") end)
 local securityBtn = actionBtn("SUMMON SECURITY", Color3.fromRGB(255, 80, 80), function() actionRemote:FireServer("JudgePower", "SUMMON_SECURITY") end)
+local explosionBtn = actionBtn("💥 EXPLOSION", Color3.fromRGB(255, 60, 60), function() actionRemote:FireServer("JudgePower", "COURTROOM_EXPLOSION") end)
 local forceConfessBtn = actionBtn("FORCE CONFESSION", Color3.fromRGB(255, 105, 180), function() actionRemote:FireServer("JudgePower", "FORCE_CONFESSION") end)
 local reverseVerdictBtn = actionBtn("REVERSE VERDICT", Color3.fromRGB(102, 224, 129), function() actionRemote:FireServer("JudgePower", "REVERSE_VERDICT") end)
 local startArgsBtn = actionBtn("START ARGS", Color3.fromRGB(255, 210, 77), function() actionRemote:FireServer("JudgeControl", "START_ARGUMENTS") end)
@@ -534,6 +546,59 @@ for _, emote in ipairs(emoteList) do
 	end)
 end
 
+-- ==================== PLAYER PROFILE MODAL ====================
+local profileBody
+profileModal, profileBody = createModal("👤 PLAYER DOSSIER & STATS", UDim2.new(0.48, 0, 0.52, 0))
+
+local function renderProfile()
+	profileBody:ClearAllChildren()
+	local pList = Instance.new("UIListLayout")
+	pList.Padding = UDim.new(0, 8)
+	pList.Parent = profileBody
+
+	local stats = {
+		{ Label = "Player Name", Value = player.DisplayName .. " (@" .. player.Name .. ")" },
+		{ Label = "Current Level", Value = "Lv. " .. (localProfile.Level or 1) },
+		{ Label = "Lifetime XP", Value = (localProfile.XP or 0) .. " XP" },
+		{ Label = "Braincoins Balance", Value = "🪙 " .. (localProfile.Braincoins or 0) },
+		{ Label = "Trials Completed", Value = tostring(localProfile.TrialsPlayed or 0) },
+		{ Label = "Verdicts Won", Value = tostring(localProfile.Wins or 0) },
+		{ Label = "Equipped Title", Value = (localProfile.Equipped and localProfile.Equipped.Title) or "title_rookie" },
+		{ Label = "Equipped Gavel", Value = (localProfile.Equipped and localProfile.Equipped.Gavel) or "gavel_wood" },
+		{ Label = "Equipped Aura", Value = (localProfile.Equipped and localProfile.Equipped.Aura) or "none" },
+	}
+
+	for _, s in ipairs(stats) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 36)
+		row.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+		row.Parent = profileBody
+		rounded(row, 8)
+
+		local l = Instance.new("TextLabel")
+		l.Position = UDim2.new(0, 10, 0, 0)
+		l.Size = UDim2.new(0.45, 0, 1, 0)
+		l.BackgroundTransparency = 1
+		l.Font = Enum.Font.GothamBold
+		l.TextColor3 = Color3.fromRGB(255, 215, 0)
+		l.TextScaled = true
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.Text = s.Label
+		l.Parent = row
+
+		local v = Instance.new("TextLabel")
+		v.Position = UDim2.new(0.5, 0, 0, 0)
+		v.Size = UDim2.new(0.48, 0, 1, 0)
+		v.BackgroundTransparency = 1
+		v.Font = Enum.Font.Gotham
+		v.TextColor3 = Color3.fromRGB(240, 240, 250)
+		v.TextScaled = true
+		v.TextXAlignment = Enum.TextXAlignment.Right
+		v.Text = s.Value
+		v.Parent = row
+	end
+end
+
 -- ==================== SETTINGS MODAL ====================
 local settingsBody
 settingsModal, settingsBody = createModal("⚙️ SETTINGS & PERFORMANCE", UDim2.new(0.45, 0, 0.42, 0))
@@ -589,7 +654,76 @@ addToggle("Screen Shake", clientSettings.ScreenShake, function(val)
 	clientSettings.ScreenShake = val
 end)
 
--- ==================== DRAMATIC OVERLAYS ====================
+-- ==================== DRAMATIC OVERLAYS & ROLE INTRO ====================
+local function showDramaticRoleIntro(role, case)
+	local roleObjectives = {
+		Judge = "Maintain order, swing your gavel, and decide the courtroom's fate!",
+		Prosecutor = "Prove the accused committed the crime with indisputable exhibits!",
+		Defense = "Cast reasonable doubt, detect contradictions, and protect your client!",
+		Defendant = "Survive the accusations, declare innocence, or make a tactical confession!",
+		Witness = "Deliver testimony, answer cross-examinations, and hold onto your story!",
+		Jury = "Listen closely to arguments, weigh the exhibits, and deliver the final verdict!",
+		Spectator = "Observe the legal chaos from the balcony seats!",
+	}
+
+	local roleColors = {
+		Judge = Color3.fromRGB(255, 215, 0),
+		Prosecutor = Color3.fromRGB(255, 80, 80),
+		Defense = Color3.fromRGB(72, 224, 214),
+		Defendant = Color3.fromRGB(255, 160, 50),
+		Witness = Color3.fromRGB(120, 225, 120),
+		Jury = Color3.fromRGB(255, 230, 80),
+		Spectator = Color3.fromRGB(180, 180, 200),
+	}
+
+	playSFX("Objection")
+	local splash = Instance.new("Frame")
+	splash.AnchorPoint = Vector2.new(0.5, 0.5)
+	splash.Position = UDim2.fromScale(0.5, 0.45)
+	splash.Size = UDim2.fromScale(0.1, 0.05)
+	splash.BackgroundColor3 = Color3.fromRGB(24, 18, 36)
+	splash.ZIndex = 12
+	splash.Parent = root
+	rounded(splash, 20)
+
+	local rTitle = Instance.new("TextLabel")
+	rTitle.Position = UDim2.fromScale(0, 0.1)
+	rTitle.Size = UDim2.fromScale(1, 0.35)
+	rTitle.BackgroundTransparency = 1
+	rTitle.Font = Enum.Font.GothamBlack
+	rTitle.TextColor3 = roleColors[role] or Color3.fromRGB(255, 215, 0)
+	rTitle.TextScaled = true
+	rTitle.Text = "YOU ARE THE " .. role:upper() .. "!"
+	rTitle.ZIndex = 13
+	rTitle.Parent = splash
+
+	local rObj = Instance.new("TextLabel")
+	rObj.Position = UDim2.fromScale(0.05, 0.5)
+	rObj.Size = UDim2.fromScale(0.9, 0.4)
+	rObj.BackgroundTransparency = 1
+	rObj.Font = Enum.Font.GothamBold
+	rObj.TextColor3 = Color3.fromRGB(255, 245, 220)
+	rObj.TextScaled = true
+	rObj.Text = roleObjectives[role] or "Participate in the trial."
+	rObj.ZIndex = 13
+	rObj.Parent = splash
+
+	TweenService:Create(splash, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.fromScale(0.75, 0.28),
+	}):Play()
+
+	task.delay(4, function()
+		if splash.Parent then
+			TweenService:Create(splash, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Size = UDim2.fromScale(0.1, 0.02),
+				BackgroundTransparency = 1,
+			}):Play()
+			task.wait(0.3)
+			splash:Destroy()
+		end
+	end)
+end
+
 local function showDramaticObjection()
 	playSFX("Objection")
 	shakeCamera(0.8, 0.4)
@@ -670,6 +804,16 @@ end
 -- ==================== STATE RENDERING ====================
 local function render(state)
 	lastState = state
+
+	-- Check for phase transition
+	if state.Phase ~= currentDisplayedPhase then
+		currentDisplayedPhase = state.Phase
+		if state.Phase == "Briefing" then
+			local role = state.Roles and state.Roles[player.UserId] or "Spectator"
+			showDramaticRoleIntro(role, state.Case)
+		end
+	end
+
 	phaseText.Text = string.format("⚖️ %s • %ss", state.Phase:upper(), state.TimeLeft or 0)
 
 	local role = state.Roles and state.Roles[player.UserId] or "Spectator"
@@ -682,11 +826,16 @@ local function render(state)
 	elseif state.Phase == "Trial" and case then
 		local ev = (state.ActiveEvidence and case.Evidence[state.ActiveEvidence])
 		local evText = ev and (" | EXHIBIT: " .. ev.Name) or ""
-		detailText.Text = string.format("[%s] CASE: %s%s", role:upper(), case.Crime, evText)
+		local pScore = state.ArgumentScores and state.ArgumentScores.Prosecutor or 0
+		local dScore = state.ArgumentScores and state.ArgumentScores.Defense or 0
+		detailText.Text = string.format("[%s] CASE: %s%s [P:%d D:%d]", role:upper(), case.Crime, evText, pScore, dScore)
 	elseif state.Phase == "Voting" then
 		detailText.Text = "Jury members: cast your final vote now!"
 	elseif state.Phase == "Verdict" and state.Votes and state.Votes.Result then
 		detailText.Text = string.format("VERDICT: %s (Guilty: %d / Not Guilty: %d)", state.Votes.Result, state.Votes.Guilty or 0, state.Votes.NotGuilty or 0)
+	elseif state.Phase == "Rewards" and state.Awards and #state.Awards > 0 then
+		local topAward = state.Awards[1]
+		detailText.Text = string.format("🎉 %s awarded to %s (+%d Coins)!", topAward.Title, topAward.Winner, topAward.Bonus)
 	end
 
 	if state.Chaos then
@@ -719,6 +868,7 @@ local function render(state)
 	silenceBtn.Visible = isTrial and isJudge
 	bananaBtn.Visible = isTrial and isJudge
 	securityBtn.Visible = isTrial and isJudge
+	explosionBtn.Visible = isTrial and isJudge
 	forceConfessBtn.Visible = isTrial and isJudge
 	reverseVerdictBtn.Visible = isTrial and isJudge
 	startArgsBtn.Visible = isTrial and isJudge
@@ -755,6 +905,7 @@ playerDataRemote.OnClientEvent:Connect(function(profile)
 
 		if shopModal.Visible then renderShop() end
 		if missionsModal.Visible then renderMissions() end
+		if profileModal.Visible then renderProfile() end
 	end
 end)
 
@@ -771,3 +922,4 @@ end)
 -- Initial UI population
 renderShop()
 renderMissions()
+renderProfile()
