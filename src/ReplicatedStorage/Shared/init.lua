@@ -10,4 +10,10 @@ return {
 	EvidenceSystem = require(script.EvidenceSystem),
 	CourtroomEvents = require(script.CourtroomEvents),
 	NPCSystem = require(script.NPCSystem),
+	CosmeticsCatalog = require(script.CosmeticsCatalog),
+	Progression = require(script.Progression),
+	Themes = require(script.Themes),
+	Animations = require(script.Animations),
+	AudioCatalog = require(script.AudioCatalog),
+	PerformanceSettings = require(script.PerformanceSettings),
 }

@@ -2,40 +2,40 @@
 
 An original, asset-free Roblox courtroom party game built in Luau with Rojo. Players become judges, lawyers, witnesses, defendants, and jury members while procedurally generated absurd cases spiral into chaotic verdicts.
 
-## Import
+## Features
 
-1. Install [Rojo](https://rojo.space/).
-2. Run `rojo serve` from this repository.
-3. Open Roblox Studio, install the Rojo plugin, and connect to the project.
-4. Publish the place and enable **Game Settings > Security > Enable Studio Access to API Services** when testing persistence.
-
-The map is generated from Roblox primitives at runtime. No unverified asset IDs or paid assets are required.
+- **Procedural Courtroom & Grand Lobby**: Detailed architecture with fluted marble columns, brass capitals, wainscoting, chandeliers, elevated judge bench with interactive 3D gavel (click/prompt to slam with audio and camera shake), witness stand with microphone, lawyer desks with lamps, 2-tier jury box, spectator pews, holding cell, and a grand waiting lobby with a live matchmaking billboard, lounge seating, water cooler, leaderboard podium, and interactive practice witness dummy.
+- **Dynamic Courtroom Themes**: Switch between `Classic Mahogany`, `Neo-Tokyo Cyberpunk`, `Ohio Dungeon`, and `Royal Golden Palace` themes with real-time floor/wall material changes, color shifts, and atmospheric lighting adjustments (`BloomEffect`, `ColorCorrectionEffect`, custom ambient and fog).
+- **Authoritative Round & Trial Systems**: 6 distinct player roles (Judge, Prosecutor, Defense, Defendant, Witness, Jury) across timed phases (Lobby, Briefing, Trial, Voting, Verdict, Rewards). Includes single-submit jury voting, bot jury fill for small servers, and disconnect cleanup.
+- **Deep Trial & Evidence Mechanics**: Randomly generated absurd cases, genuine vs misleading evidence exhibits, witness memory with lie detection and contradiction discovery, and lawyer argument scoring against case facts.
+- **Procedural Character Animations & Reactions**: Joint-manipulated R15/R6 animations for `OBJECTION!`, `GAVEL SLAM`, `CRY`, `LAUGH`, `DANCE`, and `FACEPALM` with floating reaction billboards, sound stings, and camera screen shake.
+- **Dramatic Verdict Sequences**: Fullscreen dramatic verdict presentation with custom camera shake, dark crimson dimming and jail escort for guilty defendants, and confetti explosions with victory dances for acquitted defendants.
+- **Verified Audio Catalog**: Custom sound manager powered by verified built-in Roblox client system audio (`rbxasset://sounds/...`) and procedural pitch synthesis for gavel strikes, objection stingers, guilty uproars, victory chimes, cash sounds, and countdown clocks—zero broken or unverified asset IDs.
+- **Braincoins Shop & Cosmetic Inventory**: Complete server-validated economy for purchasing and equipping gavel skins, lawyer briefcases, particle auras, player titles, and courtroom themes across Common, Rare, Epic, and Legendary rarities. Equipped props are dynamically welded to player characters upon spawning.
+- **Progression, Daily Missions & Achievements**: Automated cycling daily missions, lifetime achievements with coin/XP rewards, level progression, and glowing overhead player title billboards.
+- **Mobile Responsive Modern UI & Performance Modes**: Sleek glassmorphism top HUD with coins, level, and XP counters, responsive `UIScale` adaptation for desktop, tablet, and mobile screens, and a Low Graphics Mode toggle that disables heavy shadows and decorative particle emitters for low-end mobile devices.
 
 ## Project layout
 
-- `src/ReplicatedStorage/Shared`: shared configuration, case generation, roles, verdicts, and network names.
-- `src/ServerScriptService`: authoritative persistence, map generation, round state, voting, rewards, and cooldown validation.
-- `src/StarterPlayer/StarterPlayerScripts`: responsive runtime UI and input actions.
+- `src/ReplicatedStorage/Shared`: Shared configuration, case generation, roles, verdicts, witness memory, argument scoring, cosmetics catalog, progression missions, themes, animations, audio catalog, and performance presets.
+- `src/ServerScriptService`: Authoritative round management (`RoundService`), player data persistence & shop validation (`DataService`), procedural map builder & themes (`MapBuilder`), character cosmetic welding (`CosmeticsService`), and logic tests.
+- `src/StarterPlayer/StarterPlayerScripts`: Mobile-responsive client controller (`CourtroomClient`) managing HUD, action drawers, modal popups (Shop, Missions, Emotes, Settings), screen shake, and audio playback.
 
-## Implemented gameplay
+## Import & Setup
 
-The server assigns Judge, Prosecutor, Defense, Defendant, Witness, and Jury roles, runs complete timed rounds, teleports players to role stations, generates cases and evidence, supports evidence presentation and witness questioning, validates single-submit jury votes, awards results, and cleans up disconnected players.
-
-Judge abilities have server-side role and per-player cooldown checks. Banana rain creates physical objects; gravity glitch, judge tiny, position swap, order silence, security, forced confession, and reverse verdict have live state or character effects with cleanup. The UI exposes role-specific controls and verdict results across resizable layouts.
+1. Install [Rojo](https://rojo.space/) (v7.4+ recommended).
+2. Run `rojo serve` from this repository.
+3. Open Roblox Studio, open the place or a new baseplate, open the Rojo plugin, and click **Connect**.
+4. To test persistence: Publish the place to Roblox and enable **Game Settings > Security > Enable Studio Access to API Services**. (In offline/unpublished Studio sessions, `DataService` safely operates in local fallback mode).
 
 ## Testing checklist
 
-- Start with 2+ players in Studio's **Start Server** test mode.
-- Confirm each player receives exactly one role and jury-only voting is enforced.
-- Advance through Briefing, Trial, Voting, Verdict, and Rewards phases.
-- Disconnect a player during a trial and confirm the server continues without errors.
-- In a published test place, confirm DataStore access and verify Braincoins/XP survive rejoin.
-- Resize the client window or use the Device Emulator to check UI scaling.
-
-The repository includes a server-side smoke module at `src/ServerScriptService/Tests/LogicTests.lua`. It does not replace Roblox Studio testing: DataStore access, RemoteEvents, spawning, prompts, animations, disconnects, and multiplayer synchronization must be verified in a published or local Studio server session.
-
-Roblox Studio execution is required to validate engine behavior; static project structure can be checked before importing.
-
-## Asset manifest
-
-The project intentionally uses procedural geometry and Roblox materials. Add only original or properly licensed sounds and textures in Studio; recommended replacement points are documented in `src/SoundService/README.txt`.
+- Run automated logic tests anytime via `src/ServerScriptService/Tests/LogicTests.lua` (all tests pass in Studio edit mode).
+- Start Studio's **Start Server** test with 2+ players:
+  - Verify role assignments and role stations.
+  - Test lawyer evidence presentation, witness questioning, and argument scoring.
+  - Test jury voting and dramatic verdict presentation.
+  - Open the Shop modal and test purchasing and equipping items.
+  - Open the Missions modal and test claiming daily mission rewards.
+  - Open the Emotes modal and trigger `OBJECTION!`, `DANCE`, or `CRY`.
+  - Resize the window or use the Studio Device Emulator to test mobile touch layouts and scaling.
