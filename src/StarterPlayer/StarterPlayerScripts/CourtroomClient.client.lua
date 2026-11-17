@@ -77,12 +77,26 @@ root.Parent = gui
 
 local uiScale = Instance.new("UIScale")
 uiScale.Parent = root
+
+local trialSidePanel, lobbyPanel, actionGrid
+
 local function updateScale()
 	local viewport = camera.ViewportSize
-	if viewport.X < 750 then
-		uiScale.Scale = math.clamp(viewport.X / 800, 0.70, 1)
-	else
-		uiScale.Scale = 1
+	local scaleX = viewport.X / 850
+	local scaleY = viewport.Y / 520
+	local targetScale = math.clamp(math.min(scaleX, scaleY), 0.60, 1.0)
+	uiScale.Scale = targetScale
+
+	if trialSidePanel and lobbyPanel and actionGrid then
+		if viewport.X < 720 then
+			trialSidePanel.Size = UDim2.new(0, 175, 0.52, 0)
+			lobbyPanel.Size = UDim2.new(0, 175, 0.48, 0)
+			actionGrid.CellSize = UDim2.new(0.23, 0, 0, 44)
+		else
+			trialSidePanel.Size = UDim2.new(0, 220, 0.6, 0)
+			lobbyPanel.Size = UDim2.new(0, 220, 0.52, 0)
+			actionGrid.CellSize = UDim2.new(0.18, 0, 0, 48)
+		end
 	end
 end
 camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
@@ -304,7 +318,7 @@ actionBar.Size = UDim2.new(0.94, 0, 0, 120)
 actionBar.BackgroundTransparency = 1
 actionBar.Parent = root
 
-local actionGrid = Instance.new("UIGridLayout")
+actionGrid = Instance.new("UIGridLayout")
 actionGrid.CellSize = UDim2.new(0.18, 0, 0, 48)
 actionGrid.CellPadding = UDim2.new(0, 8, 0, 8)
 actionGrid.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -688,7 +702,7 @@ addToggle("Screen Shake", clientSettings.ScreenShake, function(val)
 end)
 
 -- ==================== LOBBY PLAYER LIST PANEL ====================
-local lobbyPanel = Instance.new("Frame")
+lobbyPanel = Instance.new("Frame")
 lobbyPanel.Name = "LobbyPanel"
 lobbyPanel.AnchorPoint = Vector2.new(1, 0.5)
 lobbyPanel.Position = UDim2.new(1, -18, 0.5, 0)
@@ -724,37 +738,61 @@ lobbyList.Padding = UDim.new(0, 6)
 lobbyList.SortOrder = Enum.SortOrder.LayoutOrder
 lobbyList.Parent = lobbyScroll
 
+-- PHASE 16 FIX: Reuse existing row frames to prevent unnecessary GUI destruction and memory churn
+local lastLobbySignature = ""
 local function updateLobbyList(state)
-	lobbyScroll:ClearAllChildren()
-	local listLayout2 = Instance.new("UIListLayout")
-	listLayout2.Padding = UDim.new(0, 6)
-	listLayout2.Parent = lobbyScroll
+	local players = Players:GetPlayers()
+	local sigParts = {}
+	for _, p in ipairs(players) do
+		local r = (state and state.Roles and state.Roles[p.UserId]) or ""
+		table.insert(sigParts, p.UserId .. ":" .. r)
+	end
+	local sig = table.concat(sigParts, "|")
+	if sig == lastLobbySignature then return end
+	lastLobbySignature = sig
 
-	for _, p in ipairs(Players:GetPlayers()) do
-		local roleStr = ""
-		if state and state.Roles then
-			roleStr = state.Roles[p.UserId] and (" [" .. state.Roles[p.UserId] .. "]") or ""
+	local existingRows = {}
+	for _, child in ipairs(lobbyScroll:GetChildren()) do
+		if child:IsA("Frame") then
+			table.insert(existingRows, child)
 		end
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, 0, 0, 36)
-		row.BackgroundColor3 = (p == player) and Color3.fromRGB(55, 40, 80) or Color3.fromRGB(34, 25, 48)
-		row.Parent = lobbyScroll
-		rounded(row, 8)
+	end
 
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.fromScale(1, 1)
-		lbl.BackgroundTransparency = 1
-		lbl.Font = Enum.Font.GothamBold
-		lbl.TextColor3 = Color3.fromRGB(240, 230, 255)
-		lbl.TextScaled = true
-		lbl.TextXAlignment = Enum.TextXAlignment.Left
-		lbl.Text = "  " .. p.DisplayName .. roleStr
-		lbl.Parent = row
+	for i, p in ipairs(players) do
+		local roleStr = ""
+		if state and state.Roles and state.Roles[p.UserId] then
+			roleStr = " [" .. state.Roles[p.UserId] .. "]"
+		end
+		local row = existingRows[i]
+		if not row then
+			row = Instance.new("Frame")
+			row.Size = UDim2.new(1, 0, 0, 36)
+			rounded(row, 8)
+			local lbl = Instance.new("TextLabel")
+			lbl.Name = "Label"
+			lbl.Size = UDim2.fromScale(1, 1)
+			lbl.BackgroundTransparency = 1
+			lbl.Font = Enum.Font.GothamBold
+			lbl.TextScaled = true
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = row
+			row.Parent = lobbyScroll
+		end
+		row.BackgroundColor3 = (p == player) and Color3.fromRGB(55, 40, 80) or Color3.fromRGB(34, 25, 48)
+		local lbl = row:FindFirstChild("Label")
+		if lbl then
+			lbl.TextColor3 = (p == player) and Color3.fromRGB(255, 230, 100) or Color3.fromRGB(240, 230, 255)
+			lbl.Text = "  " .. p.DisplayName .. roleStr
+		end
+	end
+
+	for i = #players + 1, #existingRows do
+		existingRows[i]:Destroy()
 	end
 end
 
 -- ==================== TRIAL SIDE PANELS (WITNESS & EVIDENCE) ====================
-local trialSidePanel = Instance.new("Frame")
+trialSidePanel = Instance.new("Frame")
 trialSidePanel.Name = "TrialSidePanel"
 trialSidePanel.AnchorPoint = Vector2.new(0, 0.5)
 trialSidePanel.Position = UDim2.new(0, 18, 0.5, 0)
@@ -882,27 +920,28 @@ local function appendWitnessLog(entry)
 	table.insert(witnessResponseLog, entry)
 	if #witnessResponseLog > 6 then table.remove(witnessResponseLog, 1) end
 
-	witnessScroll:ClearAllChildren()
-	local ll = Instance.new("UIListLayout")
-	ll.Padding = UDim.new(0, 4)
-	ll.Parent = witnessScroll
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 36)
+	row.BackgroundColor3 = entry.Contradiction and Color3.fromRGB(80, 20, 20) or Color3.fromRGB(28, 20, 40)
+	rounded(row, 6)
 
-	for _, e in ipairs(witnessResponseLog) do
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, 0, 0, 36)
-		row.BackgroundColor3 = e.Contradiction and Color3.fromRGB(80, 20, 20) or Color3.fromRGB(28, 20, 40)
-		row.Parent = witnessScroll
-		rounded(row, 6)
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Font = Enum.Font.Gotham
+	t.TextColor3 = entry.Contradiction and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(220, 215, 230)
+	t.TextScaled = true
+	t.TextXAlignment = Enum.TextXAlignment.Left
+	t.Text = "  " .. entry.Witness .. ": " .. entry.Answer .. (entry.Contradiction and " ⚠️" or "")
+	t.Parent = row
+	row.Parent = witnessScroll
 
-		local t = Instance.new("TextLabel")
-		t.Size = UDim2.fromScale(1, 1)
-		t.BackgroundTransparency = 1
-		t.Font = Enum.Font.Gotham
-		t.TextColor3 = e.Contradiction and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(220, 215, 230)
-		t.TextScaled = true
-		t.TextXAlignment = Enum.TextXAlignment.Left
-		t.Text = "  " .. e.Witness .. ": " .. e.Answer .. (e.Contradiction and " ⚠️" or "")
-		t.Parent = row
+	local frameChildren = {}
+	for _, child in ipairs(witnessScroll:GetChildren()) do
+		if child:IsA("Frame") then table.insert(frameChildren, child) end
+	end
+	if #frameChildren > 6 then
+		frameChildren[1]:Destroy()
 	end
 end
 
@@ -948,10 +987,11 @@ awardsListLayout.Parent = awardsScroll
 local function showAwardsPanel(awards)
 	if not awards or #awards == 0 then return end
 	playSFX("Reward")
-	awardsScroll:ClearAllChildren()
-	local ll = Instance.new("UIListLayout")
-	ll.Padding = UDim.new(0, 10)
-	ll.Parent = awardsScroll
+
+	-- Clean up previous card frames while keeping layout intact
+	for _, child in ipairs(awardsScroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
 
 	for i, award in ipairs(awards) do
 		local card = Instance.new("Frame")
@@ -1014,9 +1054,12 @@ local function showAwardsPanel(awards)
 end
 
 -- ==================== SPECTATOR FOLLOW-CAMERA ====================
-local spectatorTarget = nil
+-- PHASE 16 FIX: High-performance RenderStepped interpolation, zero tween spam, safe disconnect
 local spectatorFollowActive = false
 local spectatorTargetIndex = 1
+local spectatorRenderConn = nil
+local isCinematicPlaying = false
+local spectatorUI, specWatchingLbl
 
 local function getFollowablePlayers()
 	local list = {}
@@ -1028,34 +1071,51 @@ local function getFollowablePlayers()
 	return list
 end
 
+local function stopSpectatorCamera()
+	spectatorFollowActive = false
+	if spectatorRenderConn then
+		spectatorRenderConn:Disconnect()
+		spectatorRenderConn = nil
+	end
+	spectatorUI.Visible = false
+	camera.CameraType = Enum.CameraType.Custom
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		camera.CameraSubject = hum
+	end
+end
+
 local function startSpectatorCamera()
+	if spectatorFollowActive or isCinematicPlaying then return end
 	spectatorFollowActive = true
-	task.spawn(function()
-		while spectatorFollowActive do
-			local targets = getFollowablePlayers()
-			if #targets > 0 then
-				spectatorTargetIndex = ((spectatorTargetIndex - 1) % #targets) + 1
-				local targetChar = targets[spectatorTargetIndex].Character
-				if targetChar and targetChar.PrimaryPart then
-					local targetPos = targetChar.PrimaryPart.Position
-					local desiredCF = CFrame.new(targetPos + Vector3.new(0, 8, 14), targetPos + Vector3.new(0, 2, 0))
-					TweenService:Create(camera, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-						CFrame = desiredCF,
-					}):Play()
-				end
-			end
-			task.wait(0.05)
+	camera.CameraType = Enum.CameraType.Scriptable
+	spectatorUI.Visible = true
+
+	spectatorRenderConn = RunService.RenderStepped:Connect(function(dt)
+		if not spectatorFollowActive or isCinematicPlaying then return end
+		local targets = getFollowablePlayers()
+		if #targets == 0 then
+			local desiredCF = CFrame.lookAt(Vector3.new(0, 22, -45), Vector3.new(0, 8, 10))
+			camera.CFrame = camera.CFrame:Lerp(desiredCF, math.clamp(dt * 6, 0.05, 1))
+			specWatchingLbl.Text = "👁️ COURTROOM"
+			return
+		end
+		spectatorTargetIndex = math.clamp(spectatorTargetIndex, 1, #targets)
+		local targetPlayer = targets[spectatorTargetIndex]
+		local targetChar = targetPlayer and targetPlayer.Character
+		local rootPart = targetChar and targetChar.PrimaryPart
+		if rootPart then
+			specWatchingLbl.Text = "👁️ " .. string.sub(targetPlayer.DisplayName, 1, 10)
+			local targetPos = rootPart.Position
+			local desiredCF = CFrame.lookAt(targetPos + Vector3.new(0, 8, 16), targetPos + Vector3.new(0, 2, 0))
+			camera.CFrame = camera.CFrame:Lerp(desiredCF, math.clamp(dt * 5, 0.05, 1))
 		end
 	end)
 end
 
-local function stopSpectatorCamera()
-	spectatorFollowActive = false
-	camera.CameraType = Enum.CameraType.Custom
-end
-
 -- Spectator next/prev target UI
-local spectatorUI = Instance.new("Frame")
+spectatorUI = Instance.new("Frame")
 spectatorUI.Name = "SpectatorUI"
 spectatorUI.AnchorPoint = Vector2.new(0.5, 1)
 spectatorUI.Position = UDim2.fromScale(0.5, 0.86)
@@ -1079,10 +1139,12 @@ prevSpecBtn.BackgroundTransparency = 1
 prevSpecBtn.Parent = spectatorUI
 createButton(prevSpecBtn, "◀ PREV", Color3.fromRGB(55, 40, 80), Color3.fromRGB(240, 230, 255), function()
 	local targets = getFollowablePlayers()
-	spectatorTargetIndex = ((spectatorTargetIndex - 2) % math.max(1, #targets)) + 1
+	if #targets > 0 then
+		spectatorTargetIndex = ((spectatorTargetIndex - 2) % #targets) + 1
+	end
 end)
 
-local specWatchingLbl = Instance.new("TextLabel")
+specWatchingLbl = Instance.new("TextLabel")
 specWatchingLbl.Size = UDim2.new(0, 110, 0, 36)
 specWatchingLbl.BackgroundTransparency = 1
 specWatchingLbl.Font = Enum.Font.GothamBold
@@ -1097,23 +1159,30 @@ nextSpecBtn.BackgroundTransparency = 1
 nextSpecBtn.Parent = spectatorUI
 createButton(nextSpecBtn, "NEXT ▶", Color3.fromRGB(55, 40, 80), Color3.fromRGB(240, 230, 255), function()
 	local targets = getFollowablePlayers()
-	spectatorTargetIndex = (spectatorTargetIndex % math.max(1, #targets)) + 1
+	if #targets > 0 then
+		spectatorTargetIndex = (spectatorTargetIndex % #targets) + 1
+	end
 end)
 
 -- ==================== BRIEFING CINEMATIC CAMERA ====================
+-- PHASE 16 FIX: Resolves conflict with spectator follow camera and safely returns camera
 local function playCinematicBriefing()
-	local prevType = camera.CameraType
+	isCinematicPlaying = true
+	if spectatorFollowActive then
+		stopSpectatorCamera()
+	end
 	camera.CameraType = Enum.CameraType.Scriptable
 
 	local shots = {
-		{ CFrame.new(0, 20, 55), CFrame.new(0, 12, 36) },   -- Looking at judge bench from afar
-		{ CFrame.new(-40, 10, 15), CFrame.new(0, 8, 0) },   -- Prosecution podium angle
-		{ CFrame.new(40, 10, 15), CFrame.new(0, 8, 0) },    -- Defense podium angle
-		{ CFrame.new(0, 8, -15), CFrame.new(0, 8, 36) },    -- Defendant looking at judge
+		{ CFrame.new(0, 20, 55), CFrame.new(0, 12, 36) },
+		{ CFrame.new(-40, 10, 15), CFrame.new(0, 8, 0) },
+		{ CFrame.new(40, 10, 15), CFrame.new(0, 8, 0) },
+		{ CFrame.new(0, 8, -15), CFrame.new(0, 8, 36) },
 	}
 
 	task.spawn(function()
 		for _, shot in ipairs(shots) do
+			if not isCinematicPlaying then break end
 			local from = shot[1]
 			local lookAt = shot[2]
 			local cf = CFrame.lookAt(from, lookAt.Position)
@@ -1122,8 +1191,19 @@ local function playCinematicBriefing()
 			}):Play()
 			task.wait(1.4)
 		end
-		-- Return to player
-		camera.CameraType = prevType
+		isCinematicPlaying = false
+
+		-- Return camera cleanly based on current role and phase
+		local currentRole = lastState and lastState.Roles and lastState.Roles[player.UserId] or "Spectator"
+		local isMatchActive = (lastState and (lastState.Phase == "Trial" or lastState.Phase == "Voting" or lastState.Phase == "Verdict" or lastState.Phase == "Rewards"))
+		if isMatchActive and currentRole == "Spectator" then
+			startSpectatorCamera()
+		else
+			camera.CameraType = Enum.CameraType.Custom
+			local char = player.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then camera.CameraSubject = hum end
+		end
 	end)
 end
 
@@ -1287,6 +1367,9 @@ local function render(state)
 			playCinematicBriefing()
 		elseif state.Phase == "Rewards" and state.Awards and #state.Awards > 0 then
 			showAwardsPanel(state.Awards)
+		elseif state.Phase == "Lobby" then
+			isCinematicPlaying = false
+			stopSpectatorCamera()
 		end
 	end
 
@@ -1298,7 +1381,8 @@ local function render(state)
 	local isLobby = (state.Phase == "Lobby")
 	local isTrial = (state.Phase == "Trial")
 	local isVoting = (state.Phase == "Voting")
-	local isSpectator = (role == "Spectator")
+	local isMatchActive = (isTrial or isVoting or state.Phase == "Verdict" or state.Phase == "Rewards")
+	local isGenuineSpectator = isMatchActive and (role == "Spectator")
 	local isJury = (role == "Jury")
 	local isJudge = (role == "Judge")
 	local isLawyer = (role == "Prosecutor" or role == "Defense")
@@ -1342,22 +1426,18 @@ local function render(state)
 				end
 			elseif newCount == 0 then
 				witnessResponseLog = {}
-				witnessScroll:ClearAllChildren()
-				local ll = Instance.new("UIListLayout")
-				ll.Padding = UDim.new(0, 4)
-				ll.Parent = witnessScroll
+				for _, child in ipairs(witnessScroll:GetChildren()) do
+					if child:IsA("Frame") then child:Destroy() end
+				end
 			end
 		end
 	end
 
-	-- Spectator follow camera
-	if isSpectator and not spectatorFollowActive then
-		camera.CameraType = Enum.CameraType.Scriptable
+	-- PHASE 16 FIX: Spectator camera ONLY activates for genuine spectators in active match (never in lobby)
+	if isGenuineSpectator and not spectatorFollowActive and not isCinematicPlaying then
 		startSpectatorCamera()
-		spectatorUI.Visible = true
-	elseif not isSpectator and spectatorFollowActive then
+	elseif (not isGenuineSpectator or isLobby) and spectatorFollowActive then
 		stopSpectatorCamera()
-		spectatorUI.Visible = false
 	end
 
 	if state.Phase == "Lobby" then

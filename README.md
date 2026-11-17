@@ -14,7 +14,7 @@ An original, asset-free multiplayer Roblox courtroom party game built in Luau wi
 
 ### 2. Deep Courtroom Trial & Contradiction Engine
 - **Absurd Procedural Cases**: Hilarious crimes (e.g., stealing the moon for an oversized lamp, robbing golden toilets from the Pentagon, destroying the universe with a plastic spoon) with structured ground truth across 4 topics (`LOCATION`, `TIME`, `OBJECT`, `ACTION`).
-- **Logical Witness Memory & Zero False Positives**: Witnesses possess consistent underlying testimony. Contradictions only trigger when a witness contradicts themselves on the **same topic** or authentic reliable evidence directly disproves their claim. Asking across different topics never triggers false contradictions.
+- **Structured Factual Witness Memory & Equivalence Engine**: Witnesses possess consistent underlying testimony. Contradictions only trigger when a witness makes mutually exclusive factual claims on the **same topic** or authentic reliable evidence directly disproves their claim. Rephrased or equivalent statements (e.g. conversational filler, stop-word variations) are recognized as equivalent and never trigger false positives. Asking across different topics never triggers contradictions.
 - **Dynamic Argument Scoring**: Evaluates lawyer arguments against active evidence, witness consistency, and case facts.
 
 ### 3. Functional Humanoid Security Guard NPCs
@@ -35,10 +35,10 @@ An original, asset-free multiplayer Roblox courtroom party game built in Luau wi
   - `EVIDENCE_MIXUP`: Scrambles evidence exhibits.
   - `COURTROOM_EXPLOSION`: Explosive shockwave scattering flying paperwork.
 
-### 5. Verified Audio & Visual Polish
-- **100% Verified System Assets**: Uses verified built-in Roblox client system audio (`rbxasset://sounds/...`) and procedural pitch synthesis. Zero unverified asset IDs.
-- **Procedural Animations**: R15/R6 joint animations for `OBJECTION!`, `GAVEL SLAM`, `CRY`, `LAUGH`, `DANCE`, and `FACEPALM`.
-- **4 Unlockable Courtroom Themes**: `Classic Mahogany`, `Neo-Tokyo Cyberpunk`, `Ohio Dungeon`, and `Royal Golden Palace` with dynamic material, color, and lighting swaps.
+### 5. High-Performance Camera & Responsive UI
+- **Genuine Spectator Camera**: Scriptable follow-camera runs exclusively for genuine spectators during active trials (never in the lobby). Features smooth `RunService.RenderStepped` CFrame interpolation, zero tween spam, and cleanly coordinates with the 4-shot briefing cinematic without camera fighting.
+- **Optimized UI Performance**: Object-pooled lobby list and witness logs eliminate DOM destruction and reconstruction churn. Responsive `UIScale` auto-adapts for mobile, tablet, and desktop viewports.
+- **Verified Audio & Visual Polish**: Uses 100% verified built-in Roblox client system audio (`rbxasset://sounds/...`) and procedural pitch synthesis. Zero unverified asset IDs. Procedural joint animations for `OBJECTION!`, `GAVEL SLAM`, `CRY`, `LAUGH`, `DANCE`, and `FACEPALM`. 4 unlockable courtroom themes with dynamic material, color, and lighting swaps.
 
 ### 6. Progression & Cosmetic Economy
 - **Braincoins Shop & Inventory**: Server-validated purchasing and equipping of Gavels, Briefcases, Auras, Titles, and Themes. Cross-category equip attempts and unowned items are strictly rejected.
@@ -97,7 +97,11 @@ selene src
 ```bash
 lune run scripts/run_tests.luau
 ```
-*Result: 7 comprehensive test suites covering all bug fixes and mechanics passed with 100% success.*
+*Result: 10 comprehensive test suites covering all bug fixes, structured contradiction rules, DataStore shutdown release, remote validation, and multiplayer round flow passing with 100% success.*
+
+### 3. Studio Testing vs Automated Headless Testing
+- **Automated Lune Suite**: Headless simulation of server state, DataStore transactions, role assignment, witness contradiction engine, argument scoring, and chaos effects.
+- **Roblox Studio Testing**: Interactive multi-client testing via Studio's "Start Local Server (2–4 Players)" for visual verification of 3D geometry, client HUD, and player-to-player interaction.
 
 ### 3. Rojo Build Verification
 ```bash

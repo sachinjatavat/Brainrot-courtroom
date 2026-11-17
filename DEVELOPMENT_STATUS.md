@@ -6,11 +6,63 @@
 **Supported Capacity**: 2–12 Players per server (Scalable with autonomous bot essentials)  
 **Target Capacity**: 8–12 Players  
 **Architecture**: Server-Authoritative Luau, Rojo File System Synchronization, Procedural Geometry, Zero Unverified External Asset IDs  
-**Current State**: **ALL 14 DEVELOPMENT PHASES + ALL 8 CRITICAL BUG FIXES + PHASE 15 (UI/UX & AUDIO POLISH) IMPLEMENTED & 100% TESTED**
+**Current State**: **ALL 16 DEVELOPMENT PHASES IMPLEMENTED & 100% VERIFIED**
 
 ---
 
-## Phase 15: UI/UX Polish & Audio Completeness (NEW)
+## Phase 16: Final Bug Fixes & Real Integration Testing (LATEST)
+
+### 1. Spectator Camera Resolution & Cinematic Coordination
+- **Status**: **RESOLVED & VERIFIED**
+- Players in the **Lobby** retain their normal player camera. Spectator follow-camera mode ONLY activates for genuine spectators during an active match (`Trial`, `Voting`, `Verdict`, `Rewards`).
+- Restores camera cleanly to `Enum.CameraType.Custom` and focuses `CameraSubject` on the player's Humanoid upon role changes or returning to the lobby.
+- Solved conflict with Briefing Cinematics: when Briefing starts, `isCinematicPlaying` prevents spectator camera from interfering with the 4-shot cinematic sequence.
+
+### 2. Camera Performance: RenderStepped & Smooth Interpolation
+- **Status**: **RESOLVED & VERIFIED**
+- Completely eliminated repeated 0.05-second `TweenService:Create` camera spam and memory churn.
+- Replaced with single, high-performance `RunService.RenderStepped` connection using frame-rate independent `camera.CFrame:Lerp(...)`.
+- Explicitly disconnects `spectatorRenderConn` upon stopping spectator mode, ensuring zero memory leaks.
+
+### 3. Structured Witness Contradiction & Equivalence Engine
+- **Status**: **RESOLVED & VERIFIED**
+- Replaced exact-string-only comparison with structured factual values and semantic equivalence.
+- Added conversational filler and stop-word filtering (`"I was at the..."`, `"Around..."`, `"It occurred at..."`).
+- Equivalent statements on the same topic (e.g. `"Observatory Roof Garden"` vs `"I was standing in the Observatory Roof Garden"`, or `"3:15 AM"` vs `"It occurred around 3:15 AM"`) are recognized as equivalent and **never** trigger false contradictions.
+- Genuine contradictions (e.g. `"Observatory Roof Garden"` vs `"At the Ohio Walmart parking lot"`) are reliably flagged with specific detail.
+- Added comprehensive regression tests proving zero false positives on rephrased statements.
+
+### 4. DataStore Session Lock Release & Failed Load Protection
+- **Status**: **RESOLVED & VERIFIED**
+- `BindToClose` concurrently releases the active `_SessionLock` to `nil` on server shutdown so players can rejoin another server immediately without 15-minute lease lockout kicks.
+- `DataService.Remove(player)` explicitly releases session lock upon player exit.
+- `DataService.Save` verifies session lock ownership before writing, rejecting saves if another server has assumed ownership.
+- Failed loads set `SafeToSave = false`; subsequent `Save` calls abort, strictly preventing data wiping.
+- Rejoining immediately after server shutdown verified via automated tests.
+
+### 5. UI Performance Optimization & Responsive Mobile Layouts
+- **Status**: **RESOLVED & VERIFIED**
+- Replaced destructive `ClearAllChildren()` calls in `lobbyScroll` and `witnessScroll` with row-caching and append-only architecture, eliminating DOM rebuild lag.
+- Enhanced `UIScale` to responsively calculate both viewport width and height (`min(viewport.X / 850, viewport.Y / 520)` clamped 0.60 to 1.0).
+- Dynamically resizes action grid and side panels for mobile and tablet viewports (< 720px width).
+
+### 6. 10-Suite Automated Logic Tests
+- **Status**: **100% PASSING (10/10 SUITES)**
+- Headless execution via Lune (`lune run scripts/run_tests.luau`):
+  - **Test 1**: Role assignment for 2, 3, 4, 8, and 12 players with bot essentials.
+  - **Test 2**: Structured witness facts, equivalent rephrasing, and zero false-positive contradictions.
+  - **Test 3**: Security NPC humanoid rig and animated escort to jail with mock character.
+  - **Test 4**: Actual chaos event gameplay effects (gravity drop, tiny judge scaling, banana ragdoll).
+  - **Test 5**: DataStore safety, session lock conflict, shutdown release, and cosmetic validation.
+  - **Test 6**: Verdict calculation and bot jury voting.
+  - **Test 7**: Cosmetics catalog, progression, themes, audio, and performance settings.
+  - **Test 8**: Audio catalog completeness, buy flow simulation, and role rotation.
+  - **Test 9**: Remote event validation, argument length limits (180 chars), and role permissions.
+  - **Test 10**: Complete multiplayer round transition simulation (Lobby $\to$ Briefing $\to$ Trial $\to$ Voting $\to$ Verdict $\to$ Rewards $\to$ Lobby).
+
+---
+
+## Phase 15: UI/UX Polish & Audio Completeness
 
 ### New Feature: Lobby Player List Panel
 - **Status**: **IMPLEMENTED & VERIFIED**

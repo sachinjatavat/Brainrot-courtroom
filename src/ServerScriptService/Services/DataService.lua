@@ -7,6 +7,7 @@ local Progression = require(SharedFolder:WaitForChild("Progression"))
 
 local DataService = {}
 local storeInstance = nil
+local isShuttingDown = false
 
 local function getStore()
 	if storeInstance then return storeInstance end
@@ -19,6 +20,14 @@ local function getStore()
 		warn("[DataService] DataStore unavailable (offline/unpublished):", result)
 	end
 	return storeInstance
+end
+
+function DataService.SetStore(customStore)
+	storeInstance = customStore
+end
+
+function DataService.IsShuttingDown()
+	return isShuttingDown
 end
 
 -- Profiles in memory and their metadata
@@ -455,14 +464,14 @@ function DataService.ProcessReward(player, rewardToken, coins, xp)
 	return true
 end
 
--- BUG 1 FIX: Save safety check, retry backoff, and session lock release
-function DataService.Save(player)
+-- BUG 1 & PHASE 16 FIX: Save safety check, retry backoff, ownership verification, and explicit session lock release
+function DataService.Save(player, forceReleaseLock)
 	local data = profiles[player]
 	local meta = profileMeta[player]
 
 	if not data or saving[player] then return false, "Busy or no data" end
 
-	-- CRITICAL: Abort if profile was not safely loaded!
+	-- CRITICAL: Abort if profile was not safely loaded! (Prevents data loss)
 	if not meta or not meta.SafeToSave then
 		warn("[DataService] Save aborted for Player " .. tostring(player and player.UserId) .. ": profile was not safely loaded (preventing data wiping).")
 		return false, "Unsafe to save"
@@ -472,22 +481,24 @@ function DataService.Save(player)
 	if not ds then return true end -- Mock mode passes
 
 	saving[player] = true
+	local releaseLock = (forceReleaseLock == true) or isShuttingDown or (player.Parent == nil)
 
 	local success, err = retryWithBackoff(function()
 		return ds:UpdateAsync("Player_" .. player.UserId, function(current)
 			-- Verify session lock ownership before writing
-			if current and current._SessionLock then
-				if current._SessionLock.JobId and current._SessionLock.JobId ~= game.JobId then
+			if current and type(current) == "table" and current._SessionLock then
+				local lock = current._SessionLock
+				if lock.JobId and lock.JobId ~= game.JobId then
 					local now = os.time()
-					if (now - (current._SessionLock.Time or 0)) < 900 then
-						error("Session lock conflict: another server holds the lock")
+					if (now - (lock.Time or 0)) < 900 then
+						error("Session lock conflict: another server (" .. tostring(lock.JobId) .. ") holds the active lock")
 					end
 				end
 			end
 
 			local toSave = copy(data)
-			-- Release session lock when player leaves or on server shutdown
-			if not player.Parent then
+			-- Explicitly release session lock when player leaves, during shutdown, or on force release
+			if releaseLock then
 				toSave._SessionLock = nil
 			else
 				toSave._SessionLock = {
@@ -507,7 +518,7 @@ function DataService.Save(player)
 end
 
 function DataService.Remove(player)
-	DataService.Save(player)
+	DataService.Save(player, true) -- Explicitly release session lock on exit
 	profiles[player] = nil
 	profileMeta[player] = nil
 end
@@ -517,15 +528,16 @@ function DataService.Start()
 	Players.PlayerRemoving:Connect(DataService.Remove)
 	for _, player in ipairs(Players:GetPlayers()) do task.spawn(DataService.Load, player) end
 
-	-- BUG 1 FIX: Safe shutdown handling all active players concurrently
+	-- PHASE 16 FIX: Safe shutdown handling with explicit session lock release
 	game:BindToClose(function()
+		isShuttingDown = true
 		local activePlayers = Players:GetPlayers()
 		if #activePlayers == 0 then return end
 
 		local completed = 0
 		for _, player in ipairs(activePlayers) do
 			task.spawn(function()
-				DataService.Save(player)
+				DataService.Save(player, true) -- Explicitly release session lock
 				completed += 1
 			end)
 		end

@@ -27,6 +27,16 @@ local function createMockInstance(className)
 		PlatformStand = false,
 	}
 
+	local mockSignal = {
+		Connect = function(_, fn)
+			return { Disconnect = function() end }
+		end,
+		Wait = function() return true end,
+	}
+
+	obj.Touched = mockSignal
+	obj.MoveToFinished = mockSignal
+
 	function obj:IsA(c) return self.ClassName == c end
 	function obj:FindFirstChild(name, recursive)
 		for _, c in ipairs(self.Children) do
@@ -59,11 +69,12 @@ local function createMockInstance(className)
 		self.Parent = nil
 		self.Children = {}
 	end
-	function obj:PivotTo(...) end
+	function obj:PivotTo(cf) self.CFrame = cf end
 	function obj:GetPivot() return self.CFrame or CFrame.new() end
-	function obj:ScaleTo(...) end
-	function obj:GetScale() return 1 end
-	function obj:ApplyImpulse(...) end
+	function obj:ScaleTo(s) self.Scale = s end
+	function obj:GetScale() return self.Scale or 1 end
+	function obj:MoveTo(pos) self.TargetPos = pos end
+	function obj:ApplyImpulse(imp) self.Impulse = imp end
 
 	setmetatable(obj, {
 		__index = function(t, k)
@@ -166,19 +177,47 @@ local workspaceMock = createMockInstance("Workspace")
 workspaceMock.Gravity = 196.2
 env.workspace = workspaceMock
 
+local mockDataStoreStorage = {}
+
 local registeredServices = {
 	ReplicatedStorage = repStorage,
 	ServerScriptService = sss,
 	Players = playersService,
 	Workspace = workspaceMock,
-	TweenService = { Create = function() return { Play = function() end } end },
-	DataStoreService = {
-		GetDataStore = function()
+	TweenService = {
+		Create = function(_, instance, _, props)
 			return {
-				GetAsync = function() return nil end,
-				SetAsync = function() return true end,
+				Play = function()
+					for k, v in pairs(props) do
+						instance[k] = v
+					end
+				end,
+				Completed = {
+					Connect = function(_, cb)
+						if cb then cb() end
+						return { Disconnect = function() end }
+					end,
+				},
+			}
+		end,
+	},
+	DataStoreService = {
+		GetDataStore = function(_, name)
+			return {
+				GetAsync = function(_, key)
+					return mockDataStoreStorage[key]
+				end,
+				SetAsync = function(_, key, val)
+					mockDataStoreStorage[key] = val
+					return true
+				end,
 				UpdateAsync = function(_, key, transform)
-					return transform(nil)
+					local current = mockDataStoreStorage[key]
+					local transformed = transform(current)
+					if transformed ~= nil then
+						mockDataStoreStorage[key] = transformed
+					end
+					return transformed
 				end,
 			}
 		end,
@@ -186,6 +225,7 @@ local registeredServices = {
 }
 
 env.game = {
+	JobId = "TEST_SERVER_JOB_1",
 	GetService = function(self, name)
 		return registeredServices[name] or createMockInstance(name)
 	end,
