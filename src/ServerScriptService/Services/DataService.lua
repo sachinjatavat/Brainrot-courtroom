@@ -68,6 +68,14 @@ local DEFAULT = {
 		Claimed = {},
 	},
 	ProcessedRewards = {}, -- Idempotency set to prevent duplicate reward processing
+	ProcessedReceipts = {}, -- [purchaseId] = details map to guarantee idempotent ProcessReceipt
+	PurchaseHistory = {}, -- Array of persistent purchase logs
+	VIPSubscription = {
+		Active = false,
+		Expiration = 0,
+		LastMonthlyBonus = 0,
+	},
+	OwnedGamePasses = {}, -- [passKey] = true
 	LastDaily = 0,
 }
 
@@ -151,6 +159,42 @@ local function sanitizeData(data)
 	if type(data.ProcessedRewards) == "table" then
 		for token, val in pairs(data.ProcessedRewards) do
 			if val == true then clean.ProcessedRewards[token] = true end
+		end
+	end
+
+	-- Processed Receipts (MarketplaceService Idempotency)
+	clean.ProcessedReceipts = {}
+	if type(data.ProcessedReceipts) == "table" then
+		for pId, entry in pairs(data.ProcessedReceipts) do
+			clean.ProcessedReceipts[tostring(pId)] = entry
+		end
+	end
+
+	-- Purchase History
+	clean.PurchaseHistory = {}
+	if type(data.PurchaseHistory) == "table" then
+		for _, entry in ipairs(data.PurchaseHistory) do
+			if type(entry) == "table" then
+				table.insert(clean.PurchaseHistory, copy(entry))
+			end
+		end
+	end
+
+	-- VIP Subscription
+	clean.VIPSubscription = { Active = false, Expiration = 0, LastMonthlyBonus = 0 }
+	if type(data.VIPSubscription) == "table" then
+		clean.VIPSubscription.Active = data.VIPSubscription.Active == true
+		clean.VIPSubscription.Expiration = tonumber(data.VIPSubscription.Expiration) or 0
+		clean.VIPSubscription.LastMonthlyBonus = tonumber(data.VIPSubscription.LastMonthlyBonus) or 0
+	end
+
+	-- Owned GamePasses
+	clean.OwnedGamePasses = {}
+	if type(data.OwnedGamePasses) == "table" then
+		for passKey, owned in pairs(data.OwnedGamePasses) do
+			if owned == true then
+				clean.OwnedGamePasses[tostring(passKey)] = true
+			end
 		end
 	end
 
@@ -295,6 +339,10 @@ function DataService.BuyItem(player, itemId)
 	-- Check if already unlocked
 	for _, id in ipairs(data.Unlocked) do
 		if id == itemId then return false, "Already owned" end
+	end
+
+	if item.VIPOnly and not DataService.IsVIP(player) then
+		return false, "Item is exclusive to VIP members"
 	end
 
 	if data.Braincoins < item.Price then
@@ -462,6 +510,112 @@ function DataService.ProcessReward(player, rewardToken, coins, xp)
 	if coins and coins > 0 then DataService.AddCoins(player, coins) end
 	if xp and xp > 0 then DataService.AddXP(player, xp) end
 	return true
+end
+
+-- ==================== PHASE 18: MONETIZATION & RECEIPT PROCESSING ====================
+
+function DataService.AddBraincoins(player, amount)
+	DataService.AddCoins(player, amount)
+end
+
+function DataService.UnlockCosmetic(player, itemId)
+	local data = profiles[player]
+	if not data then return false, "No profile" end
+	if not CosmeticsCatalog.IsValid(itemId) then return false, "Invalid item" end
+	for _, id in ipairs(data.Unlocked) do
+		if id == itemId then return true, "Already unlocked" end
+	end
+	table.insert(data.Unlocked, itemId)
+	notifySync(player)
+	return true, "Unlocked"
+end
+
+function DataService.HasReceipt(player, purchaseId)
+	local data = profiles[player]
+	if not data then return false end
+	return data.ProcessedReceipts[tostring(purchaseId)] ~= nil
+end
+
+function DataService.RecordReceipt(player, purchaseId, details)
+	local data = profiles[player]
+	if not data then return false end
+	local key = tostring(purchaseId)
+	local record = details or { Timestamp = os.time() }
+	data.ProcessedReceipts[key] = record
+	table.insert(data.PurchaseHistory, {
+		PurchaseId = key,
+		ProductId = record.ProductId,
+		CurrencySpent = record.CurrencySpent,
+		Timestamp = record.Timestamp or os.time(),
+	})
+	notifySync(player)
+	return true
+end
+
+function DataService.GetPurchaseHistory(player)
+	local data = profiles[player]
+	if not data then return {} end
+	return copy(data.PurchaseHistory)
+end
+
+function DataService.SetVIPStatus(player, active, expirationTimestamp)
+	local data = profiles[player]
+	if not data then return end
+	data.VIPSubscription.Active = (active == true)
+	data.VIPSubscription.Expiration = tonumber(expirationTimestamp) or 0
+	if active then
+		DataService.UnlockCosmetic(player, "title_vip")
+		DataService.UnlockCosmetic(player, "aura_vip")
+		DataService.UnlockCosmetic(player, "gavel_vip")
+	end
+	notifySync(player)
+end
+
+function DataService.IsVIP(player)
+	local data = profiles[player]
+	if not data then return false end
+	if data.OwnedGamePasses and data.OwnedGamePasses["VIP_JUDGE"] == true then
+		return true
+	end
+	if data.VIPSubscription and data.VIPSubscription.Active == true then
+		if data.VIPSubscription.Expiration == 0 or os.time() <= data.VIPSubscription.Expiration then
+			return true
+		else
+			-- Expired! Server-side enforcement revokes active status
+			data.VIPSubscription.Active = false
+			notifySync(player)
+			return false
+		end
+	end
+	return false
+end
+
+function DataService.SetGamePassOwned(player, passKey, owned)
+	local data = profiles[player]
+	if not data then return end
+	data.OwnedGamePasses[passKey] = (owned == true)
+	notifySync(player)
+end
+
+function DataService.OwnsGamePass(player, passKey)
+	local data = profiles[player]
+	if not data then return false end
+	return data.OwnedGamePasses and data.OwnedGamePasses[passKey] == true
+end
+
+function DataService.ClaimMonthlyVIPBonus(player)
+	local data = profiles[player]
+	if not data then return false, "No profile" end
+	if not DataService.IsVIP(player) then return false, "Not VIP" end
+	local now = os.time()
+	local lastBonus = data.VIPSubscription.LastMonthlyBonus or 0
+	if now - lastBonus < (30 * 24 * 3600) then
+		return false, "Monthly bonus already claimed for this period"
+	end
+	data.VIPSubscription.LastMonthlyBonus = now
+	DataService.AddBraincoins(player, 2500)
+	notifySync(player)
+	return true, 2500
 end
 
 -- BUG 1 & PHASE 16 FIX: Save safety check, retry backoff, ownership verification, and explicit session lock release

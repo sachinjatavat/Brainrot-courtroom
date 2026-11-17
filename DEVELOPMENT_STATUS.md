@@ -6,11 +6,78 @@
 **Supported Capacity**: 2–12 Players per server (Scalable with autonomous bot essentials)  
 **Target Capacity**: 8–12 Players  
 **Architecture**: Server-Authoritative Luau, Rojo File System Synchronization, Procedural Geometry, Zero Unverified External Asset IDs  
-**Current State**: **ALL 16 DEVELOPMENT PHASES IMPLEMENTED & 100% VERIFIED**
+**Current State**: **ALL 18 DEVELOPMENT PHASES IMPLEMENTED & 100% VERIFIED**
 
 ---
 
-## Phase 16: Final Bug Fixes & Real Integration Testing (LATEST)
+## Phase 18: Complete Monetization System (LATEST)
+
+### 1. Authoritative MarketplaceService Architecture & Idempotent Receipts
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Fully server-authoritative `MarketplaceService.ProcessReceipt` callback in `MonetizationService.lua`.
+- **Strict Idempotency**: Maps `receiptInfo.PurchaseId` into `profile.ProcessedReceipts[purchaseId]`. If a receipt was already processed, it immediately returns `Enum.ProductPurchaseDecision.PurchaseGranted` without double-crediting currency or items.
+- **Transactional Persistence**: Safely credits rewards and writes to DataStore (`DataService.Save`) before acknowledging purchase to Roblox.
+- **Failure Resilience**: If the player is absent from the server, or the player profile is not safely loaded (`SafeToSave == false`), returns `Enum.ProductPurchaseDecision.NotProcessedYet` so Roblox safely retries delivery.
+- **Client Security**: Client-side purchase completion signals (`PromptProductPurchaseFinished`) are strictly treated as UI triggers; server never grants currency without an authenticated `ProcessReceipt`.
+
+### 2. Game Passes & Permanent Benefits
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Catalog defined in `src/ReplicatedStorage/Shared/MonetizationConfig.lua` with Creator Dashboard setup instructions:
+  - `VIP Judge` (149 R$): Permanent VIP status, golden magistrate title, and courtroom priority.
+  - `Golden Gavel` (79 R$): Permanent unlock for Solid Gold Gavel and Royal Golden Judge Gavel.
+  - `Premium Emotes` (99 R$): Permanent unlock for exclusive animations (`VIP_BOW`, `CHAMPAGNE`, `MIC_DROP`).
+  - `Cyberpunk Courtroom` (199 R$): Unlocks Neo-Tokyo theme, Neon Gavel, and Glitch Aura.
+  - `VIP Nameplate` (49 R$): Permanent glowing gold `[★ VIP ★]` overhead badge.
+- Verified ownership checks via `MarketplaceService:UserOwnsGamePassAsync` with session caching in `profile.OwnedGamePasses`.
+
+### 3. Developer Products (Consumable Catalog)
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Fully configurable catalog in `MonetizationConfig.lua`:
+  - `COINS_500` (49 R$): Instant 500 Braincoins.
+  - `COINS_1500` (99 R$): Instant 1,500 Braincoins with 10% value bonus.
+  - `COINS_4000` (199 R$): Instant 4,000 Braincoins.
+  - `COINS_12000` (499 R$): Instant 12,000 Braincoins (best value).
+  - `BANANA_EFFECT` (19 R$): Interactive banana peel slip effect and cartoon audio.
+  - `FUNNY_GAVEL_EFFECT` (29 R$): Squeaky gavel impact audio and confetti particle burst.
+
+### 4. VIP Subscription Lifecycle
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Monthly VIP Courtroom Club (199 R$/month equivalent):
+  - Server-side verification and expiration timestamp enforcement in `DataService.IsVIP(player)`.
+  - When subscription expires, VIP status and perks are revoked server-authoritatively.
+  - Monthly bonus: 2,500 Braincoins grantable once every 30 days (`DataService.ClaimMonthlyVIPBonus`).
+  - Active VIP perks: `[★ VIP ★]` glowing overhead nameplate, Diamond VIP Halo (`aura_vip`), Platinum VIP Gavel (`gavel_vip`), VIP Elite title (`title_vip`), and premium emotes.
+
+### 5. Multi-Category Shop UI
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Upgraded Store & Emporium in `CourtroomClient.client.lua` featuring 7 dedicated categories:
+  - `👑 VIP`: Membership banner, monthly bonus claim button, and VIP-exclusive item showcase.
+  - `🎟️ PASSES`: Robux-priced game pass cards with ownership indicators and purchase prompts.
+  - `🪙 COINS`: Repeatable Braincoin bundles and interactive effects with instant delivery indicators.
+  - `🎭 EMOTES`: Free standard emotes vs premium VIP emotes with animation preview buttons.
+  - `🔨 GAVELS`: Braincoin cosmetic shop for all judicial hammers.
+  - `💼 CHARACTER`: Briefcases, floating auras, and prestigious titles.
+  - `🏛️ THEMES`: Courtroom environmental themes (Classic, Cyberpunk, Ohio Dungeon, Luxury Palace).
+- Connected to `MarketplaceService.PromptGamePassPurchaseFinished` and `PromptProductPurchaseFinished` for instant UI synchronization.
+
+### 6. Premium Cosmetic Collections
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- 4 full cosmetic collections + VIP exclusive tier:
+  - **Golden Judge**: Royal Golden Gavel, Gold Dossier, Golden Radiance Aura, Grand Golden Magistrate Title.
+  - **Cyberpunk**: Neon Overclock Gavel, Cyber Matrix Case, Glitch Aura, Neo Netrunner Title, Cyber Theme.
+  - **Ohio**: Sigma Ohio Scepter, Grimace Case, Thick Ohio Smog Aura, Ohio Final Boss Title, Ohio Dungeon Theme.
+  - **Legendary Brainrot**: The Rizzler Gavel, Mewing Streak Case, Aura of Infinite Gyatt, Supreme Rizz Lord Title.
+  - **VIP Exclusive**: Platinum VIP Gavel, Diamond VIP Halo, VIP Elite Justice Title.
+- Strict anti-pay-to-win design: items are strictly cosmetic and provide zero trial or voting advantages.
+
+### 7. Monetization Analytics & Private Servers
+- **Status**: **IMPLEMENTED & 100% VERIFIED**
+- Real-time server analytics tracking total Robux earned, purchase volume by product, and transaction failure counts.
+- Private server detection via `MonetizationService.IsPrivateServer()` and `GetPrivateServerOwnerId()`.
+
+---
+
+## Phase 16: Final Bug Fixes & Real Integration Testing
 
 ### 1. Spectator Camera Resolution & Cinematic Coordination
 - **Status**: **RESOLVED & VERIFIED**
@@ -207,4 +274,5 @@
 | **NPC & Security Rig System** | `src/ReplicatedStorage/Shared/NPCSystem.lua` | Complete | Tested (Humanoid model, joints, safe escort) |
 | **Procedural Map & Themes** | `src/ServerScriptService/Services/MapBuilder.lua` | Complete | Tested (186 parts, 4 themes, secret chambers) |
 | **Cosmetics & Progression** | `CosmeticsCatalog.lua`, `Progression.lua` | Complete | Tested (Missions, achievements, equip validation) |
-| **UI & Mobile Responsiveness** | `src/StarterPlayer/StarterPlayerScripts/CourtroomClient.client.lua` | Complete | Verified (Action bar, modals, dynamic scaling) |
+| **Monetization Engine & Receipts** | `src/ServerScriptService/Services/MonetizationService.lua`, `MonetizationConfig.lua` | Complete | Tested (ProcessReceipt idempotency, Game Passes, VIP) |
+| **UI & Mobile Responsiveness** | `src/StarterPlayer/StarterPlayerScripts/CourtroomClient.client.lua` | Complete | Verified (Action bar, Shop categories, modals, dynamic scaling) |

@@ -5,7 +5,7 @@
 **Environment**: Windows 11, Roblox Studio (Open / Active DataModel), Rojo v7.7.1, Selene v0.32.0, Lune v0.11.1  
 **Project**: BRAINROT COURTROOM: THE FINAL VERDICT  
 **Repository**: `https://github.com/sachinjatavat/Brainrot-courtroom`  
-**Status**: **ALL 16 DEVELOPMENT PHASES & PHASE 16 CRITICAL RESOLUTIONS 100% TEST VERIFIED**
+**Status**: **ALL 18 DEVELOPMENT PHASES & PHASE 18 MONETIZATION SYSTEM 100% TEST VERIFIED**
 
 ---
 
@@ -165,3 +165,9 @@ An exhaustive audit of the entire codebase and systems was completed, followed b
 | Idempotency Protection | `LogicTests.lua` (`ProcessReward` token) | Reject duplicate | Second attempt rejected | **PASS** |
 | Cosmetic Equipment Check | `LogicTests.lua` (cross-category, unowned) | Rejections enforced | Unauthorized & mismatch rejected | **PASS** |
 | Chaos Event Definitions | `LogicTests.lua` (all 11 events) | Valid duration & gameplay | 11/11 valid | **PASS** |
+| **Marketplace ProcessReceipt** | `LogicTests.lua` (idempotent receipt processing) | `PurchaseGranted (0)`, duplicate rejected | `PurchaseGranted`, 0 duplicate currency | **PASS** |
+| **Marketplace Failure Recovery** | `LogicTests.lua` (absent player / corrupt receipt) | `NotProcessedYet (1)` for retry | `NotProcessedYet (1)` returned | **PASS** |
+| **Game Pass Verification** | `LogicTests.lua` (Game Pass ownership check) | Permanent unlocks credited | Cosmetics added, cached | **PASS** |
+| **VIP Subscription Lifecycle** | `LogicTests.lua` (30-day grant, monthly bonus, expiration) | Server-side expiration & bonus claim | 2,500 coins granted, expired revoked | **PASS** |
+| **Premium Cosmetic Collections** | `LogicTests.lua` (4 collections, VIPOnly protect) | Registered items, VIP check | All items valid, Non-VIP blocked | **PASS** |
+| **Monetization Analytics** | `LogicTests.lua` (revenue, failures, rankings) | Accurate Robux tracking | Revenue & failures accurately tracked | **PASS** |

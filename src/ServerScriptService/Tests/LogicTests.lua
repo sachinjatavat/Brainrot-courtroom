@@ -20,6 +20,12 @@ local Shared = {
 	Animations = require(SharedFolder:WaitForChild("Animations")),
 	AudioCatalog = require(SharedFolder:WaitForChild("AudioCatalog")),
 	PerformanceSettings = require(SharedFolder:WaitForChild("PerformanceSettings")),
+	MonetizationConfig = require(SharedFolder:WaitForChild("MonetizationConfig")),
+}
+
+local Services = {
+	DataService = require(ServerScriptService:WaitForChild("Services"):WaitForChild("DataService")),
+	MonetizationService = require(ServerScriptService:WaitForChild("Services"):WaitForChild("MonetizationService")),
 }
 
 local LogicTests = {}
@@ -701,6 +707,197 @@ function LogicTests.Run()
 	assert(roundState.Case == nil, "Case must be cleared on cleanup")
 
 	log("[TEST 10 PASSED] Complete multiplayer round lifecycle simulation verified successfully.")
+
+	-- ==================================================
+	-- TEST 11: MONETIZATION ARCHITECTURE & RECEIPT PROCESSING
+	-- ==================================================
+	log("[TEST 11] Monetization architecture: MarketplaceService ProcessReceipt idempotency, failed DataStore handling, duplicate protection, and Game Pass verification")
+
+	local DataService = Services.DataService
+	local MonetizationService = Services.MonetizationService
+	local MonetizationConfig = Shared.MonetizationConfig
+
+	-- 1. Verify Catalog Completeness
+	assert(MonetizationConfig.GamePasses.VIP_JUDGE ~= nil, "VIP Judge game pass must exist")
+	assert(MonetizationConfig.GamePasses.GOLDEN_GAVEL ~= nil, "Golden Gavel game pass must exist")
+	assert(MonetizationConfig.GamePasses.PREMIUM_EMOTES ~= nil, "Premium Emotes game pass must exist")
+	assert(MonetizationConfig.GamePasses.CYBERPUNK_COURTROOM ~= nil, "Cyberpunk pass must exist")
+	assert(MonetizationConfig.GamePasses.VIP_NAMEPLATE ~= nil, "VIP Nameplate pass must exist")
+
+	assert(MonetizationConfig.DeveloperProducts.COINS_500.RewardAmount == 500, "500 Coins bundle amount")
+	assert(MonetizationConfig.DeveloperProducts.COINS_1500.RewardAmount == 1500, "1500 Coins bundle amount")
+	assert(MonetizationConfig.DeveloperProducts.COINS_4000.RewardAmount == 4000, "4000 Coins bundle amount")
+	assert(MonetizationConfig.DeveloperProducts.COINS_12000.RewardAmount == 12000, "12000 Coins bundle amount")
+	assert(MonetizationConfig.DeveloperProducts.BANANA_EFFECT.EffectId == "BananaSlip", "Banana effect ID")
+	assert(MonetizationConfig.DeveloperProducts.FUNNY_GAVEL_EFFECT.EffectId == "SqueakyGavel", "Funny gavel effect ID")
+
+	-- Register Test IDs for headless simulation
+	MonetizationConfig.RegisterTestIds({
+		COINS_500 = 9001,
+		COINS_1500 = 9002,
+		BANANA_EFFECT = 9005,
+	}, {
+		GOLDEN_GAVEL = 8002,
+		VIP_JUDGE = 8001,
+	})
+
+	-- 2. Setup mock player & server remotes
+	local mockBuyer = Instance.new("Folder")
+	mockBuyer.Name = "MockBuyer1"
+	mockBuyer.UserId = 888101
+	mockBuyer.Parent = game:GetService("Players")
+
+	local testRemotesFolder = Instance.new("Folder")
+	testRemotesFolder.Name = "TestMonetizationRemotes"
+	for _, evtName in pairs(Shared.Net.Events) do
+		local r = Instance.new("RemoteEvent")
+		r.Name = evtName
+		r.Parent = testRemotesFolder
+	end
+
+	MonetizationService.Start(testRemotesFolder, DataService)
+	DataService.Load(mockBuyer)
+	local buyerProfile = DataService.Get(mockBuyer)
+	assert(buyerProfile ~= nil, "Player profile must be loaded")
+	local initialCoins = buyerProfile.Braincoins
+
+	-- 3. Test ProcessReceipt: First time processing
+	local receipt1 = {
+		PurchaseId = "ROBLOX_TXN_001_ABC",
+		PlayerId = mockBuyer.UserId,
+		ProductId = 9001,
+		CurrencySpent = 49,
+	}
+	local decision1 = MonetizationService.ProcessReceipt(receipt1)
+	assert(decision1 == 0, "Valid ProcessReceipt must return PurchaseGranted (0)")
+	assert(DataService.Get(mockBuyer).Braincoins == initialCoins + 500, "Braincoins bundle must be credited")
+	assert(DataService.HasReceipt(mockBuyer, "ROBLOX_TXN_001_ABC") == true, "Receipt must be recorded")
+
+	local history = DataService.GetPurchaseHistory(mockBuyer)
+	assert(#history >= 1, "Purchase history must record transaction")
+	assert(history[#history].PurchaseId == "ROBLOX_TXN_001_ABC", "Purchase ID matches")
+
+	-- 4. Test ProcessReceipt: Duplicate Receipt (Idempotency guarantee)
+	local coinsBeforeDup = DataService.Get(mockBuyer).Braincoins
+	local decisionDup = MonetizationService.ProcessReceipt(receipt1)
+	assert(decisionDup == 0, "Duplicate receipt must return PurchaseGranted immediately")
+	assert(DataService.Get(mockBuyer).Braincoins == coinsBeforeDup, "Duplicate receipt must NEVER grant duplicate currency")
+
+	-- 5. Test ProcessReceipt: Absent Player (Returns NotProcessedYet so Roblox retries)
+	local absentReceipt = {
+		PurchaseId = "ROBLOX_TXN_002_OFFLINE",
+		PlayerId = 999999999, -- not in server
+		ProductId = 9001,
+		CurrencySpent = 49,
+	}
+	local absentDecision = MonetizationService.ProcessReceipt(absentReceipt)
+	assert(absentDecision == 1, "Receipt for absent player must return NotProcessedYet (1)")
+
+	-- 6. Test ProcessReceipt: Corrupt / Missing fields & Unknown Product
+	local corruptDecision = MonetizationService.ProcessReceipt({ PurchaseId = nil })
+	assert(corruptDecision == 1, "Corrupt receipt must return NotProcessedYet (1)")
+
+	local unknownProdDecision = MonetizationService.ProcessReceipt({
+		PurchaseId = "ROBLOX_TXN_UNKNOWN",
+		PlayerId = mockBuyer.UserId,
+		ProductId = 999999,
+		CurrencySpent = 10,
+	})
+	assert(unknownProdDecision == 1, "Unknown product ID returns NotProcessedYet (1)")
+
+	-- 7. Test Game Pass ownership cache and unlock
+	DataService.SetGamePassOwned(mockBuyer, "GOLDEN_GAVEL", true)
+	assert(DataService.OwnsGamePass(mockBuyer, "GOLDEN_GAVEL") == true, "Player owns Game Pass")
+	assert(MonetizationService.CheckGamePassOwnership(mockBuyer, "GOLDEN_GAVEL") == true, "Cached Game Pass check succeeds")
+
+	log("[TEST 11 PASSED] Monetization architecture, idempotent ProcessReceipt, and Game Pass verification verified.")
+
+	-- ==================================================
+	-- TEST 12: VIP SUBSCRIPTION, COLLECTIONS & ANALYTICS
+	-- ==================================================
+	log("[TEST 12] VIP subscription lifecycle, premium cosmetic collections, analytics engine, and private server validation")
+
+	-- 1. VIP Subscription Activation & Expiration Lifecycle
+	local mockVipPlayer = Instance.new("Folder")
+	mockVipPlayer.Name = "MockVipUser"
+	mockVipPlayer.UserId = 888202
+	mockVipPlayer.Parent = game:GetService("Players")
+	DataService.Load(mockVipPlayer)
+
+	-- Active VIP grant
+	MonetizationService.GrantVIPSubscription(mockVipPlayer, 30 * 86400)
+	assert(DataService.IsVIP(mockVipPlayer) == true, "Player must be recognized as active VIP")
+	assert(MonetizationService.VerifyVIPStatus(mockVipPlayer) == true, "MonetizationService verifies VIP status")
+
+	-- Verify VIP cosmetics automatically unlocked
+	local vipProfile = DataService.Get(mockVipPlayer)
+	local hasVipGavel = false
+	local hasVipTitle = false
+	local hasVipAura = false
+	for _, id in ipairs(vipProfile.Unlocked) do
+		if id == "gavel_vip" then hasVipGavel = true end
+		if id == "title_vip" then hasVipTitle = true end
+		if id == "aura_vip" then hasVipAura = true end
+	end
+	assert(hasVipGavel and hasVipTitle and hasVipAura, "VIP exclusive cosmetics must be unlocked")
+
+	-- Claim Monthly VIP Bonus
+	local preBonusCoins = vipProfile.Braincoins
+	local bonusSuccess, bonusCoins = DataService.ClaimMonthlyVIPBonus(mockVipPlayer)
+	assert(bonusSuccess == true and bonusCoins == 2500, "VIP monthly bonus claims 2,500 Braincoins")
+	assert(DataService.Get(mockVipPlayer).Braincoins == preBonusCoins + 2500, "Braincoins credited")
+
+	-- Duplicate Claim within 30 days must fail
+	local dupBonusSuccess, dupBonusErr = DataService.ClaimMonthlyVIPBonus(mockVipPlayer)
+	assert(dupBonusSuccess == false, "Duplicate monthly bonus claim must fail: " .. tostring(dupBonusErr))
+
+	-- VIP Expiration Enforcement (server-authoritative revocation)
+	DataService.SetVIPStatus(mockVipPlayer, true, os.time() - 3600) -- Expired 1 hour ago
+	assert(DataService.IsVIP(mockVipPlayer) == false, "Expired VIP must be server-authoritatively revoked")
+	assert(MonetizationService.VerifyVIPStatus(mockVipPlayer) == false, "MonetizationService revokes expired VIP")
+
+	-- Expired VIP cannot claim monthly bonus
+	local expiredClaimSuccess = DataService.ClaimMonthlyVIPBonus(mockVipPlayer)
+	assert(expiredClaimSuccess == false, "Expired VIP cannot claim monthly bonus")
+
+	-- 2. Premium Cosmetic Collections Validation
+	local collections = Shared.CosmeticsCatalog.GetAllCollections()
+	assert(collections.GoldenJudge ~= nil, "Golden Judge collection exists")
+	assert(collections.Cyberpunk ~= nil, "Cyberpunk collection exists")
+	assert(collections.Ohio ~= nil, "Ohio collection exists")
+	assert(collections.LegendaryBrainrot ~= nil, "Legendary Brainrot collection exists")
+	assert(collections.VIPExclusive ~= nil, "VIP Exclusive collection exists")
+
+	for colName, col in pairs(collections) do
+		for _, itemId in ipairs(col.Items) do
+			assert(Shared.CosmeticsCatalog.IsValid(itemId) or Shared.Themes.Get(itemId:gsub("theme_", "")),
+				string.format("Item %s in collection %s must be registered", itemId, colName))
+		end
+	end
+
+	-- Verify Non-VIP cannot purchase VIPOnly item
+	local nonVipPlayer = Instance.new("Folder")
+	nonVipPlayer.Name = "NonVipUser"
+	nonVipPlayer.UserId = 888303
+	nonVipPlayer.Parent = game:GetService("Players")
+	DataService.Load(nonVipPlayer)
+	local buyVipSuccess, buyVipErr = DataService.BuyItem(nonVipPlayer, "gavel_vip")
+	assert(buyVipSuccess == false, "Non-VIP cannot purchase VIPOnly item with Braincoins: " .. tostring(buyVipErr))
+
+	-- 3. Monetization Analytics Summary
+	local analytics = MonetizationService.GetAnalyticsSummary()
+	assert(analytics.TotalRobuxEarned >= 49, "Total Robux recorded from transactions")
+	assert(analytics.TotalReceiptsProcessed >= 1, "Total receipts recorded")
+	assert(analytics.PurchaseFailures >= 2, "Purchase failures tracked")
+	assert(type(analytics.PopularProducts) == "table", "Popular products table exists")
+
+	-- 4. Private Server Queries
+	local isPrivate = MonetizationService.IsPrivateServer()
+	assert(type(isPrivate) == "boolean", "Private server check returns boolean")
+	local ownerId = MonetizationService.GetPrivateServerOwnerId()
+	assert(type(ownerId) == "number", "Owner ID is number")
+
+	log("[TEST 12 PASSED] VIP subscription lifecycle, premium collections, analytics engine, and private servers verified.")
 
 	return true, testLog
 end

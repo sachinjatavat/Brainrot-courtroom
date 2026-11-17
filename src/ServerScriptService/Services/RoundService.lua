@@ -34,6 +34,7 @@ local emoteCooldowns = {}
 local roleHistory = {}
 local activityTracker = { AbilitiesUsed = {}, LongestArg = { Player = nil, Length = 0 } }
 local DataService
+local monetizationServiceRef = nil
 local activeEffects = {}
 
 local VALID_ABILITIES = {
@@ -788,7 +789,7 @@ local function validEvidence(payload)
 	return type(payload) == "number" and state.Case and state.Case.Evidence[payload] ~= nil
 end
 
-function RoundService.Start(remoteFolder, dataService)
+function RoundService.Start(remoteFolder, dataService, monetizationService)
 	remotes = {
 		State = remoteFolder:WaitForChild("CourtroomState"),
 		Action = remoteFolder:WaitForChild("CourtroomAction"),
@@ -797,6 +798,7 @@ function RoundService.Start(remoteFolder, dataService)
 		CosmeticEffect = remoteFolder:WaitForChild("CourtroomCosmeticEffect"),
 	}
 	DataService = dataService
+	monetizationServiceRef = monetizationService
 
 	DataService.SetSyncCallback(function(player, profile)
 		if remotes.PlayerData and player.Parent then
@@ -850,8 +852,20 @@ function RoundService.Start(remoteFolder, dataService)
 			local now = os.clock()
 			if (emoteCooldowns[player.UserId] or 0) > now then return end
 			emoteCooldowns[player.UserId] = now + 2.5
-			local validEmotes = { OBJECTION = true, GAVEL_SLAM = true, CRY = true, LAUGH = true, DANCE = true, FACEPALM = true }
+			local validEmotes = {
+				OBJECTION = true, GAVEL_SLAM = true, CRY = true, LAUGH = true, DANCE = true, FACEPALM = true,
+				VIP_BOW = true, CHAMPAGNE = true, MIC_DROP = true,
+			}
 			if validEmotes[payload] and player.Character then
+				local isPremium = (payload == "VIP_BOW" or payload == "CHAMPAGNE" or payload == "MIC_DROP")
+				if isPremium and monetizationServiceRef then
+					local ownsPass = monetizationServiceRef.CheckGamePassOwnership(player, "PREMIUM_EMOTES")
+					local isVip = DataService.IsVIP(player)
+					if not ownsPass and not isVip then
+						remotes.Notification:FireClient(player, "This emote requires VIP Club or Premium Emotes Game Pass!")
+						return
+					end
+				end
 				Animations.Play(player.Character, payload, 2.5)
 				remotes.CosmeticEffect:FireAllClients("Emote", player.UserId, payload)
 				activityTracker.AbilitiesUsed[player.UserId] = (activityTracker.AbilitiesUsed[player.UserId] or 0) + 1
@@ -862,6 +876,18 @@ function RoundService.Start(remoteFolder, dataService)
 					remotes.CosmeticEffect:FireAllClients("Sound", "GavelSlam")
 					triggerSpectatorReaction("ORDER!")
 				end
+			end
+		elseif action == "CheckGamePasses" then
+			if monetizationServiceRef then
+				monetizationServiceRef.CheckAllGamePasses(player)
+			end
+		elseif action == "ClaimVIPBonus" then
+			local success, res = DataService.ClaimMonthlyVIPBonus(player)
+			if success then
+				remotes.Notification:FireClient(player, "VIP MONTHLY BONUS: +2,500 BRAINCOINS!")
+				remotes.CosmeticEffect:FireClient(player, "Sound", "CashEarned")
+			else
+				remotes.Notification:FireClient(player, "VIP Bonus: " .. tostring(res))
 			end
 		elseif action == "SelectTheme" and state.Roles[player.UserId] == "Judge" and type(payload) == "string" then
 			if Themes.Get(payload) then

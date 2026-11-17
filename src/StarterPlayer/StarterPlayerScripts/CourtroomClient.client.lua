@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -14,6 +15,7 @@ local Themes = Shared.Themes
 local Animations = Shared.Animations
 local AudioCatalog = Shared.AudioCatalog
 local PerformanceSettings = Shared.PerformanceSettings
+local MonetizationConfig = Shared.MonetizationConfig
 
 local remotes = ReplicatedStorage:WaitForChild("CourtroomRemotes")
 local stateRemote = remotes:WaitForChild("CourtroomState")
@@ -402,102 +404,505 @@ end
 
 -- ==================== SHOP & INVENTORY MODAL ====================
 local shopBody
-shopModal, shopBody = createModal("🛒 BRAINCOINS SHOP & INVENTORY")
+shopModal, shopBody = createModal("🛒 STORE & MONETIZATION EMPORIUM", UDim2.new(0.74, 0, 0.72, 0))
 
-local function renderShop()
+local currentShopCategory = "VIP"
+local categoryBar = Instance.new("Frame")
+categoryBar.Position = UDim2.new(0, 16, 0, 48)
+categoryBar.Size = UDim2.new(1, -32, 0, 32)
+categoryBar.BackgroundTransparency = 1
+categoryBar.Parent = shopModal
+
+local catLayout = Instance.new("UIListLayout")
+catLayout.FillDirection = Enum.FillDirection.Horizontal
+catLayout.Padding = UDim.new(0, 6)
+catLayout.Parent = categoryBar
+
+shopBody.Position = UDim2.new(0, 16, 0, 88)
+shopBody.Size = UDim2.new(1, -32, 1, -100)
+
+local SHOP_TABS = {
+	{ Key = "VIP", Label = "👑 VIP" },
+	{ Key = "PASSES", Label = "🎟️ PASSES" },
+	{ Key = "COINS", Label = "🪙 COINS" },
+	{ Key = "EMOTES", Label = "🎭 EMOTES" },
+	{ Key = "GAVEL", Label = "🔨 GAVELS" },
+	{ Key = "CHARACTER", Label = "💼 CHARACTER" },
+	{ Key = "THEME", Label = "🏛️ THEMES" },
+}
+
+local function renderShopCategories()
+	categoryBar:ClearAllChildren()
+	catLayout = Instance.new("UIListLayout")
+	catLayout.FillDirection = Enum.FillDirection.Horizontal
+	catLayout.Padding = UDim.new(0, 6)
+	catLayout.Parent = categoryBar
+
+	for _, tab in ipairs(SHOP_TABS) do
+		local isSelected = (currentShopCategory == tab.Key)
+		local tabContainer = Instance.new("Frame")
+		tabContainer.Size = UDim2.new(0.134, 0, 1, 0)
+		tabContainer.BackgroundTransparency = 1
+		tabContainer.Parent = categoryBar
+
+		local bgCol = isSelected and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(45, 32, 60)
+		local txtCol = isSelected and Color3.fromRGB(24, 16, 36) or Color3.fromRGB(240, 235, 250)
+
+		createButton(tabContainer, tab.Label, bgCol, txtCol, function()
+			currentShopCategory = tab.Key
+			renderShopCategories()
+			renderShop()
+		end)
+	end
+end
+
+function renderShop()
 	shopBody:ClearAllChildren()
 	shopBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	shopBody.CanvasSize = UDim2.new(0, 0, 0, 0)
-	local grid = Instance.new("UIGridLayout")
-	grid.CellSize = UDim2.new(0.31, 0, 0, 120)
-	grid.CellPadding = UDim2.new(0, 10, 0, 10)
-	grid.Parent = shopBody
 
 	local padShop = Instance.new("UIPadding")
-	padShop.PaddingBottom = UDim.new(0, 8)
+	padShop.PaddingBottom = UDim.new(0, 12)
 	padShop.Parent = shopBody
 
-	local items = CosmeticsCatalog.GetAll()
-	for _, item in ipairs(items) do
-		local card = Instance.new("Frame")
-		card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
-		card.Parent = shopBody
-		rounded(card, 12)
+	local isPlayerVIP = false
+	if (localProfile.VIPSubscription and localProfile.VIPSubscription.Active) or (localProfile.OwnedGamePasses and localProfile.OwnedGamePasses.VIP_JUDGE) then
+		isPlayerVIP = true
+	end
 
-		-- Rarity strip at top
-		local rarityBar = Instance.new("Frame")
-		rarityBar.Size = UDim2.new(1, 0, 0, 5)
-		rarityBar.BackgroundColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
-		rarityBar.BorderSizePixel = 0
-		rarityBar.Parent = card
-		local rarityCorner = Instance.new("UICorner")
-		rarityCorner.CornerRadius = UDim.new(0, 10)
-		rarityCorner.Parent = rarityBar
+	if currentShopCategory == "VIP" then
+		-- Big VIP Membership Banner
+		local vipBanner = Instance.new("Frame")
+		vipBanner.Size = UDim2.new(1, 0, 0, 120)
+		vipBanner.BackgroundColor3 = Color3.fromRGB(40, 24, 60)
+		vipBanner.Parent = shopBody
+		rounded(vipBanner, 14)
 
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Position = UDim2.new(0, 8, 0, 8)
-		nameLabel.Size = UDim2.new(1, -16, 0, 22)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Font = Enum.Font.GothamBold
-		nameLabel.TextColor3 = item.Color or Color3.fromRGB(255, 255, 255)
-		nameLabel.TextScaled = true
-		nameLabel.Text = item.Name
-		nameLabel.Parent = card
+		local vipBannerTitle = Instance.new("TextLabel")
+		vipBannerTitle.Position = UDim2.new(0, 16, 0, 10)
+		vipBannerTitle.Size = UDim2.new(0.65, 0, 0, 26)
+		vipBannerTitle.BackgroundTransparency = 1
+		vipBannerTitle.Font = Enum.Font.GothamBlack
+		vipBannerTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+		vipBannerTitle.TextScaled = true
+		vipBannerTitle.TextXAlignment = Enum.TextXAlignment.Left
+		vipBannerTitle.Text = "👑 VIP COURTROOM MEMBERSHIP"
+		vipBannerTitle.Parent = vipBanner
 
-		local rarityLabel = Instance.new("TextLabel")
-		rarityLabel.Position = UDim2.new(0, 8, 0, 32)
-		rarityLabel.Size = UDim2.new(1, -16, 0, 16)
-		rarityLabel.BackgroundTransparency = 1
-		rarityLabel.Font = Enum.Font.Gotham
-		rarityLabel.TextColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
-		rarityLabel.TextScaled = true
-		rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
-		rarityLabel.Text = item.Rarity or "Common"
-		rarityLabel.Parent = card
+		local vipBannerDesc = Instance.new("TextLabel")
+		vipBannerDesc.Position = UDim2.new(0, 16, 0, 38)
+		vipBannerDesc.Size = UDim2.new(0.65, 0, 0, 48)
+		vipBannerDesc.BackgroundTransparency = 1
+		vipBannerDesc.Font = Enum.Font.Gotham
+		vipBannerDesc.TextColor3 = Color3.fromRGB(230, 220, 240)
+		vipBannerDesc.TextScaled = true
+		vipBannerDesc.TextXAlignment = Enum.TextXAlignment.Left
+		vipBannerDesc.Text = "• Golden [VIP] Overhead Nameplate\n• Exclusive Diamond Halo & Platinum Gavel\n• Special VIP Emotes & Lounge Access\n• 2,500 Braincoins Monthly Reward!"
+		vipBannerDesc.Parent = vipBanner
 
-		local descLabel = Instance.new("TextLabel")
-		descLabel.Position = UDim2.new(0, 8, 0, 50)
-		descLabel.Size = UDim2.new(1, -16, 0, 32)
-		descLabel.BackgroundTransparency = 1
-		descLabel.Font = Enum.Font.Gotham
-		descLabel.TextColor3 = Color3.fromRGB(200, 190, 210)
-		descLabel.TextScaled = true
-		descLabel.Text = item.Description or item.Category
-		descLabel.Parent = card
+		local vipActionBox = Instance.new("Frame")
+		vipActionBox.Position = UDim2.new(0.7, 0, 0, 20)
+		vipActionBox.Size = UDim2.new(0.28, 0, 0, 75)
+		vipActionBox.BackgroundTransparency = 1
+		vipActionBox.Parent = vipBanner
 
-		local isOwned = false
-		for _, ownedId in ipairs(localProfile.Unlocked or {}) do
-			if ownedId == item.Id then isOwned = true break end
-		end
-
-		local isEquipped = (localProfile.Equipped and localProfile.Equipped[item.Category] == item.Id)
-
-		local actionContainer = Instance.new("Frame")
-		actionContainer.Position = UDim2.new(0, 8, 0, 84)
-		actionContainer.Size = UDim2.new(1, -16, 0, 28)
-		actionContainer.BackgroundTransparency = 1
-		actionContainer.Parent = card
-
-		if isEquipped then
-			createButton(actionContainer, "✓ EQUIPPED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
-		elseif isOwned then
-			createButton(actionContainer, "EQUIP", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
-				actionRemote:FireServer("EquipItem", { Category = item.Category, ItemId = item.Id })
+		if isPlayerVIP then
+			createButton(vipActionBox, "CLAIM 2,500 🪙\nMONTHLY BONUS", Color3.fromRGB(255, 200, 40), Color3.fromRGB(24, 16, 36), function()
+				actionRemote:FireServer("ClaimVIPBonus")
 			end)
 		else
-			local priceText = (item.Price == 0) and "FREE" or ("🪙 " .. item.Price)
-			local canAfford = (localProfile.Braincoins or 0) >= item.Price
-			createButton(actionContainer, priceText,
-				canAfford and Color3.fromRGB(255, 180, 50) or Color3.fromRGB(80, 70, 90),
-				Color3.fromRGB(25, 18, 36),
-				canAfford and function()
-					actionRemote:FireServer("BuyItem", item.Id)
-					playSFX("BuyItem")
-				end or nil
-			)
+			createButton(vipActionBox, "JOIN VIP CLUB\n(R$ 199 / mo)", Color3.fromRGB(255, 215, 0), Color3.fromRGB(24, 16, 36), function()
+				local passDef = MonetizationConfig.GamePasses.VIP_JUDGE
+				if passDef and passDef.Id and passDef.Id > 0 then
+					MarketplaceService:PromptGamePassPurchase(player, passDef.Id)
+				else
+					detailText.Text = "VIP configured in MonetizationConfig (Creator Dashboard setup ready)!"
+				end
+			end)
+		end
+
+		-- VIP Showcase Items
+		local showcaseTitle = Instance.new("TextLabel")
+		showcaseTitle.Position = UDim2.new(0, 0, 0, 130)
+		showcaseTitle.Size = UDim2.new(1, 0, 0, 24)
+		showcaseTitle.BackgroundTransparency = 1
+		showcaseTitle.Font = Enum.Font.GothamBold
+		showcaseTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+		showcaseTitle.TextScaled = true
+		showcaseTitle.TextXAlignment = Enum.TextXAlignment.Left
+		showcaseTitle.Text = "EXCLUSIVE VIP ITEMS (INCLUDED WITH VIP)"
+		showcaseTitle.Parent = shopBody
+
+		local showcaseGrid = Instance.new("Frame")
+		showcaseGrid.Position = UDim2.new(0, 0, 0, 160)
+		showcaseGrid.Size = UDim2.new(1, 0, 0, 140)
+		showcaseGrid.BackgroundTransparency = 1
+		showcaseGrid.Parent = shopBody
+
+		local vipItems = { "gavel_vip", "aura_vip", "title_vip" }
+		for idx, vId in ipairs(vipItems) do
+			local itm = CosmeticsCatalog.Get(vId)
+			if itm then
+				local card = Instance.new("Frame")
+				card.Position = UDim2.new((idx - 1) * 0.33, 0, 0, 0)
+				card.Size = UDim2.new(0.31, 0, 0, 130)
+				card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+				card.Parent = showcaseGrid
+				rounded(card, 12)
+
+				local nameLbl = Instance.new("TextLabel")
+				nameLbl.Position = UDim2.new(0, 8, 0, 8)
+				nameLbl.Size = UDim2.new(1, -16, 0, 22)
+				nameLbl.BackgroundTransparency = 1
+				nameLbl.Font = Enum.Font.GothamBold
+				nameLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+				nameLbl.TextScaled = true
+				nameLbl.Text = itm.Name
+				nameLbl.Parent = card
+
+				local descLbl = Instance.new("TextLabel")
+				descLbl.Position = UDim2.new(0, 8, 0, 34)
+				descLbl.Size = UDim2.new(1, -16, 0, 42)
+				descLbl.BackgroundTransparency = 1
+				descLbl.Font = Enum.Font.Gotham
+				descLbl.TextColor3 = Color3.fromRGB(200, 190, 210)
+				descLbl.TextScaled = true
+				descLbl.Text = itm.Description
+				descLbl.Parent = card
+
+				local isEquipped = (localProfile.Equipped and localProfile.Equipped[itm.Category] == itm.Id)
+				local actBox = Instance.new("Frame")
+				actBox.Position = UDim2.new(0, 8, 0, 86)
+				actBox.Size = UDim2.new(1, -16, 0, 32)
+				actBox.BackgroundTransparency = 1
+				actBox.Parent = card
+
+				if not isPlayerVIP then
+					createButton(actBox, "🔒 VIP ONLY", Color3.fromRGB(80, 60, 90), Color3.fromRGB(180, 170, 190), nil)
+				elseif isEquipped then
+					createButton(actBox, "✓ EQUIPPED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
+				else
+					createButton(actBox, "EQUIP", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
+						actionRemote:FireServer("EquipItem", { Category = itm.Category, ItemId = itm.Id })
+					end)
+				end
+			end
+		end
+
+	elseif currentShopCategory == "PASSES" then
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.new(0.31, 0, 0, 135)
+		grid.CellPadding = UDim2.new(0, 10, 0, 10)
+		grid.Parent = shopBody
+
+		for _, pass in pairs(MonetizationConfig.GamePasses) do
+			local card = Instance.new("Frame")
+			card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+			card.Parent = shopBody
+			rounded(card, 12)
+
+			local topBar = Instance.new("Frame")
+			topBar.Size = UDim2.new(1, 0, 0, 5)
+			topBar.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+			topBar.BorderSizePixel = 0
+			topBar.Parent = card
+			local tbc = Instance.new("UICorner")
+			tbc.CornerRadius = UDim.new(0, 10)
+			tbc.Parent = topBar
+
+			local nameLbl = Instance.new("TextLabel")
+			nameLbl.Position = UDim2.new(0, 8, 0, 8)
+			nameLbl.Size = UDim2.new(1, -16, 0, 22)
+			nameLbl.BackgroundTransparency = 1
+			nameLbl.Font = Enum.Font.GothamBold
+			nameLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+			nameLbl.TextScaled = true
+			nameLbl.Text = pass.Name
+			nameLbl.Parent = card
+
+			local priceLbl = Instance.new("TextLabel")
+			priceLbl.Position = UDim2.new(0, 8, 0, 30)
+			priceLbl.Size = UDim2.new(1, -16, 0, 16)
+			priceLbl.BackgroundTransparency = 1
+			priceLbl.Font = Enum.Font.GothamBold
+			priceLbl.TextColor3 = Color3.fromRGB(100, 240, 140)
+			priceLbl.TextScaled = true
+			priceLbl.TextXAlignment = Enum.TextXAlignment.Left
+			priceLbl.Text = "R$ " .. pass.PriceRobux .. " (Permanent)"
+			priceLbl.Parent = card
+
+			local descLbl = Instance.new("TextLabel")
+			descLbl.Position = UDim2.new(0, 8, 0, 48)
+			descLbl.Size = UDim2.new(1, -16, 0, 42)
+			descLbl.BackgroundTransparency = 1
+			descLbl.Font = Enum.Font.Gotham
+			descLbl.TextColor3 = Color3.fromRGB(200, 190, 210)
+			descLbl.TextScaled = true
+			descLbl.Text = pass.Description
+			descLbl.Parent = card
+
+			local isOwned = localProfile.OwnedGamePasses and localProfile.OwnedGamePasses[pass.Key]
+			local actBox = Instance.new("Frame")
+			actBox.Position = UDim2.new(0, 8, 0, 96)
+			actBox.Size = UDim2.new(1, -16, 0, 30)
+			actBox.BackgroundTransparency = 1
+			actBox.Parent = card
+
+			if isOwned then
+				createButton(actBox, "✓ OWNED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
+			else
+				createButton(actBox, "BUY (R$ " .. pass.PriceRobux .. ")", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
+					if pass.Id and pass.Id > 0 then
+						MarketplaceService:PromptGamePassPurchase(player, pass.Id)
+					else
+						detailText.Text = "Pass configured! Set pass ID in MonetizationConfig.lua."
+					end
+				end)
+			end
+		end
+
+	elseif currentShopCategory == "COINS" then
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.new(0.31, 0, 0, 135)
+		grid.CellPadding = UDim2.new(0, 10, 0, 10)
+		grid.Parent = shopBody
+
+		for _, prod in pairs(MonetizationConfig.DeveloperProducts) do
+			local card = Instance.new("Frame")
+			card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+			card.Parent = shopBody
+			rounded(card, 12)
+
+			local topBar = Instance.new("Frame")
+			topBar.Size = UDim2.new(1, 0, 0, 5)
+			topBar.BackgroundColor3 = Color3.fromRGB(72, 170, 255)
+			topBar.BorderSizePixel = 0
+			topBar.Parent = card
+			local tbc = Instance.new("UICorner")
+			tbc.CornerRadius = UDim.new(0, 10)
+			tbc.Parent = topBar
+
+			local nameLbl = Instance.new("TextLabel")
+			nameLbl.Position = UDim2.new(0, 8, 0, 8)
+			nameLbl.Size = UDim2.new(1, -16, 0, 22)
+			nameLbl.BackgroundTransparency = 1
+			nameLbl.Font = Enum.Font.GothamBold
+			nameLbl.TextColor3 = Color3.fromRGB(255, 230, 120)
+			nameLbl.TextScaled = true
+			nameLbl.Text = prod.Name
+			nameLbl.Parent = card
+
+			local priceLbl = Instance.new("TextLabel")
+			priceLbl.Position = UDim2.new(0, 8, 0, 30)
+			priceLbl.Size = UDim2.new(1, -16, 0, 16)
+			priceLbl.BackgroundTransparency = 1
+			priceLbl.Font = Enum.Font.GothamBold
+			priceLbl.TextColor3 = Color3.fromRGB(100, 240, 140)
+			priceLbl.TextScaled = true
+			priceLbl.TextXAlignment = Enum.TextXAlignment.Left
+			priceLbl.Text = "R$ " .. prod.PriceRobux .. " (Instant)"
+			priceLbl.Parent = card
+
+			local descLbl = Instance.new("TextLabel")
+			descLbl.Position = UDim2.new(0, 8, 0, 48)
+			descLbl.Size = UDim2.new(1, -16, 0, 42)
+			descLbl.BackgroundTransparency = 1
+			descLbl.Font = Enum.Font.Gotham
+			descLbl.TextColor3 = Color3.fromRGB(200, 190, 210)
+			descLbl.TextScaled = true
+			descLbl.Text = prod.Description
+			descLbl.Parent = card
+
+			local actBox = Instance.new("Frame")
+			actBox.Position = UDim2.new(0, 8, 0, 96)
+			actBox.Size = UDim2.new(1, -16, 0, 30)
+			actBox.BackgroundTransparency = 1
+			actBox.Parent = card
+
+			createButton(actBox, "BUY (R$ " .. prod.PriceRobux .. ")", Color3.fromRGB(255, 180, 50), Color3.fromRGB(25, 18, 36), function()
+				if prod.Id and prod.Id > 0 then
+					MarketplaceService:PromptProductPurchase(player, prod.Id)
+				else
+					detailText.Text = "Product configured! Set product ID in MonetizationConfig.lua."
+				end
+			end)
+		end
+
+	elseif currentShopCategory == "EMOTES" then
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.new(0.31, 0, 0, 125)
+		grid.CellPadding = UDim2.new(0, 10, 0, 10)
+		grid.Parent = shopBody
+
+		local emotesList = {
+			{ Key = "OBJECTION", Name = "Point Objection!", Type = "Standard", IsFree = true },
+			{ Key = "GAVEL_SLAM", Name = "Slam Gavel", Type = "Standard", IsFree = true },
+			{ Key = "DANCE", Name = "Victory Dance", Type = "Standard", IsFree = true },
+			{ Key = "LAUGH", Name = "Laugh at Court", Type = "Standard", IsFree = true },
+			{ Key = "CRY", Name = "Dramatic Cry", Type = "Standard", IsFree = true },
+			{ Key = "FACEPALM", Name = "Facepalm", Type = "Standard", IsFree = true },
+			{ Key = "VIP_BOW", Name = "Aristocrat Bow", Type = "Premium", IsFree = false },
+			{ Key = "CHAMPAGNE", Name = "Pop Champagne", Type = "Premium", IsFree = false },
+			{ Key = "MIC_DROP", Name = "Supreme Mic Drop", Type = "Premium", IsFree = false },
+		}
+
+		local ownsPass = localProfile.OwnedGamePasses and localProfile.OwnedGamePasses.PREMIUM_EMOTES
+
+		for _, em in ipairs(emotesList) do
+			local card = Instance.new("Frame")
+			card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+			card.Parent = shopBody
+			rounded(card, 12)
+
+			local nameLbl = Instance.new("TextLabel")
+			nameLbl.Position = UDim2.new(0, 8, 0, 8)
+			nameLbl.Size = UDim2.new(1, -16, 0, 22)
+			nameLbl.BackgroundTransparency = 1
+			nameLbl.Font = Enum.Font.GothamBold
+			nameLbl.TextColor3 = em.IsFree and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(255, 215, 0)
+			nameLbl.TextScaled = true
+			nameLbl.Text = em.Name
+			nameLbl.Parent = card
+
+			local tagLbl = Instance.new("TextLabel")
+			tagLbl.Position = UDim2.new(0, 8, 0, 32)
+			tagLbl.Size = UDim2.new(1, -16, 0, 16)
+			tagLbl.BackgroundTransparency = 1
+			tagLbl.Font = Enum.Font.Gotham
+			tagLbl.TextColor3 = em.IsFree and Color3.fromRGB(160, 230, 160) or Color3.fromRGB(255, 105, 180)
+			tagLbl.TextScaled = true
+			tagLbl.TextXAlignment = Enum.TextXAlignment.Left
+			tagLbl.Text = em.IsFree and "FREE / UNLOCKED" or "PREMIUM EMOTE"
+			tagLbl.Parent = card
+
+			local actBox = Instance.new("Frame")
+			actBox.Position = UDim2.new(0, 8, 0, 80)
+			actBox.Size = UDim2.new(1, -16, 0, 32)
+			actBox.BackgroundTransparency = 1
+			actBox.Parent = card
+
+			local canPlay = em.IsFree or isPlayerVIP or ownsPass
+			if canPlay then
+				createButton(actBox, "PLAY EMOTE", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
+					actionRemote:FireServer("PlayEmote", em.Key)
+				end)
+			else
+				createButton(actBox, "🔒 PASS REQUIRED", Color3.fromRGB(80, 60, 90), Color3.fromRGB(180, 170, 190), function()
+					currentShopCategory = "PASSES"
+					renderShopCategories()
+					renderShop()
+				end)
+			end
+		end
+
+	else
+		-- Cosmetics Catalog categories: GAVEL, CHARACTER, THEME
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.new(0.31, 0, 0, 120)
+		grid.CellPadding = UDim2.new(0, 10, 0, 10)
+		grid.Parent = shopBody
+
+		local items = {}
+		if currentShopCategory == "GAVEL" then
+			items = CosmeticsCatalog.GetByCategory("Gavel")
+		elseif currentShopCategory == "CHARACTER" then
+			for _, item in ipairs(CosmeticsCatalog.GetAll()) do
+				if item.Category == "Briefcase" or item.Category == "Aura" or item.Category == "Title" then
+					table.insert(items, item)
+				end
+			end
+		elseif currentShopCategory == "THEME" then
+			items = CosmeticsCatalog.GetByCategory("Theme")
+		end
+
+		for _, item in ipairs(items) do
+			local card = Instance.new("Frame")
+			card.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+			card.Parent = shopBody
+			rounded(card, 12)
+
+			local rarityBar = Instance.new("Frame")
+			rarityBar.Size = UDim2.new(1, 0, 0, 5)
+			rarityBar.BackgroundColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
+			rarityBar.BorderSizePixel = 0
+			rarityBar.Parent = card
+			local rarityCorner = Instance.new("UICorner")
+			rarityCorner.CornerRadius = UDim.new(0, 10)
+			rarityCorner.Parent = rarityBar
+
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Position = UDim2.new(0, 8, 0, 8)
+			nameLabel.Size = UDim2.new(1, -16, 0, 22)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Font = Enum.Font.GothamBold
+			nameLabel.TextColor3 = item.Color or Color3.fromRGB(255, 255, 255)
+			nameLabel.TextScaled = true
+			nameLabel.Text = item.Name
+			nameLabel.Parent = card
+
+			local rarityLabel = Instance.new("TextLabel")
+			rarityLabel.Position = UDim2.new(0, 8, 0, 32)
+			rarityLabel.Size = UDim2.new(1, -16, 0, 16)
+			rarityLabel.BackgroundTransparency = 1
+			rarityLabel.Font = Enum.Font.Gotham
+			rarityLabel.TextColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
+			rarityLabel.TextScaled = true
+			rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
+			rarityLabel.Text = item.Rarity or "Common"
+			rarityLabel.Parent = card
+
+			local descLabel = Instance.new("TextLabel")
+			descLabel.Position = UDim2.new(0, 8, 0, 50)
+			descLabel.Size = UDim2.new(1, -16, 0, 32)
+			descLabel.BackgroundTransparency = 1
+			descLabel.Font = Enum.Font.Gotham
+			descLabel.TextColor3 = Color3.fromRGB(200, 190, 210)
+			descLabel.TextScaled = true
+			descLabel.Text = item.Description or item.Category
+			descLabel.Parent = card
+
+			local isOwned = false
+			for _, ownedId in ipairs(localProfile.Unlocked or {}) do
+				if ownedId == item.Id then isOwned = true break end
+			end
+
+			local isEquipped = (localProfile.Equipped and localProfile.Equipped[item.Category] == item.Id)
+
+			local actionContainer = Instance.new("Frame")
+			actionContainer.Position = UDim2.new(0, 8, 0, 84)
+			actionContainer.Size = UDim2.new(1, -16, 0, 28)
+			actionContainer.BackgroundTransparency = 1
+			actionContainer.Parent = card
+
+			if item.VIPOnly and not isPlayerVIP then
+				createButton(actionContainer, "👑 VIP ONLY", Color3.fromRGB(80, 60, 90), Color3.fromRGB(180, 170, 190), function()
+					currentShopCategory = "VIP"
+					renderShopCategories()
+					renderShop()
+				end)
+			elseif isEquipped then
+				createButton(actionContainer, "✓ EQUIPPED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
+			elseif isOwned then
+				createButton(actionContainer, "EQUIP", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
+					actionRemote:FireServer("EquipItem", { Category = item.Category, ItemId = item.Id })
+				end)
+			else
+				local priceText = (item.Price == 0) and "FREE" or ("🪙 " .. item.Price)
+				local canAfford = (localProfile.Braincoins or 0) >= item.Price
+				createButton(actionContainer, priceText,
+					canAfford and Color3.fromRGB(255, 180, 50) or Color3.fromRGB(80, 70, 90),
+					Color3.fromRGB(25, 18, 36),
+					canAfford and function()
+						actionRemote:FireServer("BuyItem", item.Id)
+						playSFX("BuyItem")
+					end or nil
+				)
+			end
 		end
 	end
 end
+
+renderShopCategories()
 
 -- ==================== MISSIONS & ACHIEVEMENTS MODAL ====================
 local missionsBody
@@ -1539,3 +1944,20 @@ end)
 renderShop()
 renderMissions()
 renderProfile()
+
+-- ==================== MARKETPLACE LISTENERS ====================
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(_, passId, wasPurchased)
+	if wasPurchased then
+		actionRemote:FireServer("CheckGamePasses")
+		detailText.Text = "🎉 GAME PASS PURCHASE DETECTED! Syncing perks..."
+		playSFX("CashEarned")
+		if shopModal.Visible then renderShop() end
+	end
+end)
+
+MarketplaceService.PromptProductPurchaseFinished:Connect(function(_, productId, wasPurchased)
+	if wasPurchased then
+		detailText.Text = "🪙 TRANSACTION SUBMITTED! Server processing delivery..."
+		playSFX("CashEarned")
+	end
+end)

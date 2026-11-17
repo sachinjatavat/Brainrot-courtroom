@@ -8,6 +8,17 @@ local CFrame = roblox.CFrame
 local UDim2 = roblox.UDim2
 local UDim = roblox.UDim
 local Enum = roblox.Enum
+local mockEnum = {}
+setmetatable(mockEnum, {
+	__index = function(_, k)
+		if Enum and Enum[k] then return Enum[k] end
+		return {}
+	end,
+})
+mockEnum.ProductPurchaseDecision = {
+	PurchaseGranted = 0,
+	NotProcessedYet = 1,
+}
 
 local function createMockInstance(className)
 	local obj = {
@@ -36,6 +47,12 @@ local function createMockInstance(className)
 
 	obj.Touched = mockSignal
 	obj.MoveToFinished = mockSignal
+	obj.OnServerEvent = mockSignal
+	obj.OnClientEvent = mockSignal
+
+	function obj:FireClient(...) end
+	function obj:FireAllClients(...) end
+	function obj:FireServer(...) end
 
 	function obj:IsA(c) return self.ClassName == c end
 	function obj:FindFirstChild(name, recursive)
@@ -100,7 +117,7 @@ env.Vector3 = Vector3
 env.CFrame = CFrame
 env.UDim2 = UDim2
 env.UDim = UDim
-env.Enum = Enum
+env.Enum = mockEnum
 env.TweenInfo = { new = function(...) return {} end }
 env.PhysicalProperties = { new = function(...) return {} end }
 env.math = math
@@ -172,6 +189,21 @@ testsFolder.Parent = sss
 local playersService = createMockInstance("Folder")
 playersService.Name = "Players"
 playersService.Parent = gameDataModel
+playersService.PlayerAdded = {
+	Connect = function(_, fn) return { Disconnect = function() end } end,
+	Wait = function() return true end,
+}
+playersService.PlayerRemoving = {
+	Connect = function(_, fn) return { Disconnect = function() end } end,
+	Wait = function() return true end,
+}
+playersService.GetPlayers = function(self) return self.Children end
+playersService.GetPlayerByUserId = function(self, uid)
+	for _, c in ipairs(self.Children) do
+		if c.UserId == uid then return c end
+	end
+	return nil
+end
 
 local workspaceMock = createMockInstance("Workspace")
 workspaceMock.Gravity = 196.2
@@ -222,6 +254,14 @@ local registeredServices = {
 			}
 		end,
 	},
+	MarketplaceService = {
+		ProcessReceipt = nil,
+		UserOwnsGamePassAsync = function(_, userId, passId)
+			return false
+		end,
+		PromptGamePassPurchase = function(_, player, passId) end,
+		PromptProductPurchase = function(_, player, productId) end,
+	},
 }
 
 env.game = {
@@ -253,8 +293,10 @@ local modulePaths = {
 	Animations = "src/ReplicatedStorage/Shared/Animations.lua",
 	AudioCatalog = "src/ReplicatedStorage/Shared/AudioCatalog.lua",
 	PerformanceSettings = "src/ReplicatedStorage/Shared/PerformanceSettings.lua",
+	MonetizationConfig = "src/ReplicatedStorage/Shared/MonetizationConfig.lua",
 	DataService = "src/ServerScriptService/Services/DataService.lua",
 	CosmeticsService = "src/ServerScriptService/Services/CosmeticsService.lua",
+	MonetizationService = "src/ServerScriptService/Services/MonetizationService.lua",
 	MapBuilder = "src/ServerScriptService/Services/MapBuilder.lua",
 	LogicTests = "src/ServerScriptService/Tests/LogicTests.lua",
 }

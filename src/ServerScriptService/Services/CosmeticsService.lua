@@ -24,16 +24,27 @@ function CosmeticsService.Clear(character)
 	if oldTitle then oldTitle:Destroy() end
 end
 
-function CosmeticsService.ApplyTitle(player, character, titleId)
-	if not character or not titleId or titleId == "none" then return end
+function CosmeticsService.ApplyTitle(player, character, titleId, profile)
+	if not character then return end
 	local head = character:FindFirstChild("Head")
 	if not head then return end
 
 	local existing = character:FindFirstChild("OverheadTitle")
 	if existing then existing:Destroy() end
 
-	local item = CosmeticsCatalog.Get(titleId)
-	if not item then return end
+	local isVip = false
+	if profile then
+		if profile.OwnedGamePasses and (profile.OwnedGamePasses["VIP_JUDGE"] or profile.OwnedGamePasses["VIP_NAMEPLATE"]) then
+			isVip = true
+		elseif profile.VIPSubscription and profile.VIPSubscription.Active then
+			if profile.VIPSubscription.Expiration == 0 or os.time() <= profile.VIPSubscription.Expiration then
+				isVip = true
+			end
+		end
+	end
+
+	local item = (titleId and titleId ~= "none") and CosmeticsCatalog.Get(titleId) or nil
+	if not item and not isVip then return end
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "OverheadTitle"
@@ -47,11 +58,22 @@ function CosmeticsService.ApplyTitle(player, character, titleId)
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
-	label.TextColor3 = item.Color or Color3.fromRGB(255, 215, 0)
+	label.TextColor3 = isVip and Color3.fromRGB(255, 215, 0) or ((item and item.Color) or Color3.fromRGB(255, 255, 255))
 	label.TextStrokeTransparency = 0.2
 	label.TextStrokeColor3 = Color3.fromRGB(15, 10, 25)
 	label.TextScaled = true
-	label.Text = "« " .. item.Name .. " »"
+
+	local titleText = ""
+	if isVip then
+		titleText = "[★ VIP ★] "
+	end
+	if item then
+		titleText ..= "« " .. item.Name .. " »"
+	elseif isVip then
+		titleText ..= "« Courtroom Elite »"
+	end
+
+	label.Text = titleText
 	label.Parent = billboard
 end
 
@@ -156,7 +178,7 @@ function CosmeticsService.Apply(player, role, profile)
 	local equipped = profile and profile.Equipped or {}
 
 	-- Title and Aura for everyone
-	CosmeticsService.ApplyTitle(player, character, equipped.Title)
+	CosmeticsService.ApplyTitle(player, character, equipped.Title, profile)
 	CosmeticsService.ApplyAura(character, equipped.Aura)
 
 	-- Role props

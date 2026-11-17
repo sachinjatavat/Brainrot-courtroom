@@ -5,6 +5,7 @@ local Net = require(SharedFolder:WaitForChild("Net"))
 local DataService = require(ServerScriptService:WaitForChild("Services"):WaitForChild("DataService"))
 local MapBuilder = require(ServerScriptService:WaitForChild("Services"):WaitForChild("MapBuilder"))
 local RoundService = require(ServerScriptService:WaitForChild("Services"):WaitForChild("RoundService"))
+local MonetizationService = require(ServerScriptService:WaitForChild("Services"):WaitForChild("MonetizationService"))
 
 local remotes = ReplicatedStorage:FindFirstChild("CourtroomRemotes")
 if not remotes then
@@ -25,4 +26,5 @@ if not workspace:FindFirstChild("BrainrotCourtroomMap") then
 	MapBuilder.Build()
 end
 DataService.Start()
-RoundService.Start(remotes, DataService)
+MonetizationService.Start(remotes, DataService)
+RoundService.Start(remotes, DataService, MonetizationService)

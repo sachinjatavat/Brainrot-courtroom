@@ -11,3 +11,4 @@ Thumbs.db
 
 # Local editor settings
 .vscode/
+sourcemap.json

@@ -16,4 +16,5 @@ return {
 	Animations = require(script.Animations),
 	AudioCatalog = require(script.AudioCatalog),
 	PerformanceSettings = require(script.PerformanceSettings),
+	MonetizationConfig = require(script.MonetizationConfig),
 }
