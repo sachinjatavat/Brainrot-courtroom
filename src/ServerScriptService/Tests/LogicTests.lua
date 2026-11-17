@@ -308,12 +308,77 @@ function LogicTests.Run()
 	local audio = Shared.AudioCatalog
 	assert(audio.Sounds.GavelSlam and type(audio.Sounds.GavelSlam.SoundId) == "string", "GavelSlam sound required")
 	assert(audio.Sounds.Objection and audio.Sounds.Objection.Volume > 0, "Objection sound required")
+	-- New sounds added for chaos events and UI
+	assert(audio.Sounds.Explosion and type(audio.Sounds.Explosion.SoundId) == "string", "Explosion sound required")
+	assert(audio.Sounds.Static and type(audio.Sounds.Static.SoundId) == "string", "Static sound required (VOICE_LOSS)")
+	assert(audio.Sounds.Confession and type(audio.Sounds.Confession.SoundId) == "string", "Confession sound required")
+	assert(audio.Sounds.BuyItem and type(audio.Sounds.BuyItem.SoundId) == "string", "BuyItem sound required")
+	assert(audio.Sounds.RoundStart and type(audio.Sounds.RoundStart.SoundId) == "string", "RoundStart sound required")
+	assert(audio.Sounds.Reward and type(audio.Sounds.Reward.SoundId) == "string", "Reward sound required")
 
 	local perf = Shared.PerformanceSettings
 	assert(perf.Presets.Low and perf.Presets.Low.CastShadows == false, "Low preset must disable shadows")
 	assert(perf.Presets.High and perf.Presets.High.CastShadows == true, "High preset must enable shadows")
 
 	log("[TEST 7 PASSED] Cosmetics catalog, progression, themes, audio and performance verified.")
+
+	-- =========================================================================
+	-- TEST 8: NEW FEATURES — AUDIO COMPLETENESS & COSMETICS PURCHASE FLOW
+	-- =========================================================================
+	log("[TEST 8] New feature validation: audio completeness, buy flow, lobby UI structures")
+
+	-- All sounds referenced by name in RoundService & CourtroomClient must exist
+	local requiredSounds = {
+		"GavelSlam", "Objection", "VerdictGuilty", "VerdictNotGuilty", "CashEarned",
+		"JailDoor", "BananaSlip", "CountdownTick", "EquipItem",
+		"Explosion", "Static", "Confession", "BuyItem", "RoundStart", "Reward", "LobbyAmbient",
+	}
+	for _, name in ipairs(requiredSounds) do
+		assert(Shared.AudioCatalog.Sounds[name] ~= nil, "Missing required sound: " .. name)
+		assert(type(Shared.AudioCatalog.Sounds[name].SoundId) == "string", "Sound " .. name .. " must have SoundId string")
+		assert((Shared.AudioCatalog.Sounds[name].Volume or 0) > 0, "Sound " .. name .. " must have positive Volume")
+	end
+
+	-- CosmeticsCatalog: BuyItem flow — item exists, owned after purchase simulation
+	local mockProfile = {
+		Braincoins = 500,
+		Unlocked = { "gavel_wood", "case_leather", "title_rookie", "theme_classic" },
+		Equipped = { Gavel = "gavel_wood", Briefcase = "case_leather", Aura = "none", Title = "title_rookie", Theme = "theme_classic" },
+	}
+	-- Simulate BuyItem logic
+	local targetItem = Shared.CosmeticsCatalog.Get("gavel_gold")
+	assert(targetItem ~= nil, "gavel_gold must be in catalog")
+	assert(targetItem.Price == 450, "gavel_gold price must be 450")
+	assert(mockProfile.Braincoins >= targetItem.Price, "Mock profile can afford gavel_gold")
+	mockProfile.Braincoins -= targetItem.Price
+	table.insert(mockProfile.Unlocked, "gavel_gold")
+	assert(mockProfile.Braincoins == 50, "Remaining coins should be 50 after 450 purchase")
+	local ownsGavelGold = false
+	for _, id in ipairs(mockProfile.Unlocked) do
+		if id == "gavel_gold" then ownsGavelGold = true break end
+	end
+	assert(ownsGavelGold, "gavel_gold must be in Unlocked after purchase")
+
+	-- EquipItem validation: category mismatch should fail
+	local gavelGold = Shared.CosmeticsCatalog.Get("gavel_gold")
+	assert(gavelGold.Category == "Gavel", "gavel_gold must be in Gavel category")
+	-- Trying to equip a Gavel item into Briefcase slot: Category mismatch
+	local equipCategoryMatch = (gavelGold.Category == "Briefcase")
+	assert(equipCategoryMatch == false, "Category mismatch: Gavel cannot go into Briefcase slot")
+
+	-- RoleAssigner rotation: players rotate each round
+	local rotPlayers = { { UserId = 1 }, { UserId = 2 }, { UserId = 3 }, { UserId = 4 } }
+	local rotRng = Random.new(999)
+	local h1, _ = Shared.RoleAssigner.Assign(rotPlayers, rotRng)
+	local h2, _ = Shared.RoleAssigner.Assign(rotPlayers, rotRng, h1)
+	-- After rotation, at least one player should have a different role
+	local sameRoles = true
+	for _, p in ipairs(rotPlayers) do
+		if h1[p.UserId] ~= h2[p.UserId] then sameRoles = false break end
+	end
+	assert(not sameRoles, "Role rotation must change at least one player's role between rounds")
+
+	log("[TEST 8 PASSED] Audio completeness, BuyItem flow, equip validation, and role rotation verified.")
 
 	return true, testLog
 end

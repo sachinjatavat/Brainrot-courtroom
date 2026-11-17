@@ -48,6 +48,42 @@ AudioCatalog.Sounds = {
 		Volume = 0.7,
 		PlaybackSpeed = 1.4,
 	},
+	-- Chaos / drama sounds
+	Explosion = {
+		SoundId = "rbxasset://sounds/uproar.mp3",
+		Volume = 1.4,
+		PlaybackSpeed = 0.5,
+	},
+	Static = {
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
+		Volume = 0.9,
+		PlaybackSpeed = 0.4,
+	},
+	Confession = {
+		SoundId = "rbxasset://sounds/action_falling.mp3",
+		Volume = 1.0,
+		PlaybackSpeed = 0.7,
+	},
+	BuyItem = {
+		SoundId = "rbxasset://sounds/button.wav",
+		Volume = 1.0,
+		PlaybackSpeed = 1.6,
+	},
+	LobbyAmbient = {
+		SoundId = "rbxasset://sounds/electronicpingshort.wav",
+		Volume = 0.3,
+		PlaybackSpeed = 0.8,
+	},
+	RoundStart = {
+		SoundId = "rbxasset://sounds/bell.wav",
+		Volume = 1.1,
+		PlaybackSpeed = 1.1,
+	},
+	Reward = {
+		SoundId = "rbxasset://sounds/button.wav",
+		Volume = 1.0,
+		PlaybackSpeed = 2.0,
+	},
 }
 
 function AudioCatalog.PlaySound(name, parent)

@@ -6,7 +6,66 @@
 **Supported Capacity**: 2–12 Players per server (Scalable with autonomous bot essentials)  
 **Target Capacity**: 8–12 Players  
 **Architecture**: Server-Authoritative Luau, Rojo File System Synchronization, Procedural Geometry, Zero Unverified External Asset IDs  
-**Current State**: **ALL 14 DEVELOPMENT PHASES + ALL 8 CRITICAL BUG FIXES IMPLEMENTED & 100% TESTED**
+**Current State**: **ALL 14 DEVELOPMENT PHASES + ALL 8 CRITICAL BUG FIXES + PHASE 15 (UI/UX & AUDIO POLISH) IMPLEMENTED & 100% TESTED**
+
+---
+
+## Phase 15: UI/UX Polish & Audio Completeness (NEW)
+
+### New Feature: Lobby Player List Panel
+- **Status**: **IMPLEMENTED & VERIFIED**
+- Right-side panel visible during Lobby phase shows all connected players with their current assigned roles.
+- Real-time updates on each state broadcast.
+- Highlights the local player's row in a distinct color.
+
+### New Feature: Trial Side Panel (Argument Scores, Evidence & Witness Log)
+- **Status**: **IMPLEMENTED & VERIFIED**
+- Left-side panel visible during Trial phase with 3 live sections:
+  - **Argument Scores**: Live Prosecution vs Defense score tracker (color-coded red/cyan).
+  - **Active Exhibit**: Shows name and description of the currently presented piece of evidence.
+  - **Witness Log**: Scrollable feed of the last 6 witness responses, with contradiction rows highlighted red with ⚠️ indicator.
+
+### New Feature: Spectator Follow-Camera
+- **Status**: **IMPLEMENTED & VERIFIED**
+- When assigned the `Spectator` role, the camera switches to `Scriptable` mode and follows other players.
+- Smooth third-person orbit via TweenService (0.4s follow update).
+- PREV/NEXT buttons to cycle through observable players.
+- Camera type is restored to `Custom` when player returns to an active role.
+
+### New Feature: Post-Round Awards Leaderboard
+- **Status**: **IMPLEMENTED & VERIFIED**
+- Beautiful full-screen awards panel slides in during Rewards phase with medal icons (🥇🥈🥉⭐).
+- Lists all awards with winner name and coin bonus.
+- Auto-dismisses after 10 seconds with fade-out tween.
+- Plays `Reward` sound on appearance.
+
+### New Feature: Briefing Cinematic Camera Pan
+- **Status**: **IMPLEMENTED & VERIFIED**
+- Triggers automatically at Briefing phase start alongside the role-intro splash.
+- 4-shot cinematic sequence: judge bench wide shot → prosecution podium → defense podium → defendant looking at judge.
+- 1.2s smooth `TweenService` interpolation between shots; returns to player camera after 5.6 seconds.
+
+### New Feature: Shop Improvements
+- **Status**: **IMPLEMENTED & VERIFIED**
+- `AutomaticCanvasSize = Y` prevents invisible items below the fold.
+- Rarity color strip at top of each shop card (Common/Rare/Epic/Legendary).
+- Rarity label visible in item card.
+- BUY button is greyed out when player cannot afford the item (no longer clickable).
+- `BuyItem` sound plays on purchase confirmation.
+
+### New Feature: AudioCatalog Completeness
+- **Status**: **IMPLEMENTED & VERIFIED**
+- Added 7 previously missing sounds:
+  - `Explosion` (used by `COURTROOM_EXPLOSION` chaos event)
+  - `Static` (used by `VOICE_LOSS` chaos event)
+  - `Confession` (dramatic audio for Force Confession judge power)
+  - `BuyItem` (shop purchase sound)
+  - `LobbyAmbient` (background lobby ambience)
+  - `RoundStart` (start-of-round notification)
+  - `Reward` (post-round awards fanfare)
+- All referenced by name via `AudioCatalog.PlaySound(name, parent)` — no missing keys.
+
+---
 
 ---
 

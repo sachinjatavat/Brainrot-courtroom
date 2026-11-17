@@ -392,10 +392,16 @@ shopModal, shopBody = createModal("🛒 BRAINCOINS SHOP & INVENTORY")
 
 local function renderShop()
 	shopBody:ClearAllChildren()
+	shopBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	shopBody.CanvasSize = UDim2.new(0, 0, 0, 0)
 	local grid = Instance.new("UIGridLayout")
-	grid.CellSize = UDim2.new(0.31, 0, 0, 110)
+	grid.CellSize = UDim2.new(0.31, 0, 0, 120)
 	grid.CellPadding = UDim2.new(0, 10, 0, 10)
 	grid.Parent = shopBody
+
+	local padShop = Instance.new("UIPadding")
+	padShop.PaddingBottom = UDim.new(0, 8)
+	padShop.Parent = shopBody
 
 	local items = CosmeticsCatalog.GetAll()
 	for _, item in ipairs(items) do
@@ -404,8 +410,18 @@ local function renderShop()
 		card.Parent = shopBody
 		rounded(card, 12)
 
+		-- Rarity strip at top
+		local rarityBar = Instance.new("Frame")
+		rarityBar.Size = UDim2.new(1, 0, 0, 5)
+		rarityBar.BackgroundColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
+		rarityBar.BorderSizePixel = 0
+		rarityBar.Parent = card
+		local rarityCorner = Instance.new("UICorner")
+		rarityCorner.CornerRadius = UDim.new(0, 10)
+		rarityCorner.Parent = rarityBar
+
 		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Position = UDim2.new(0, 8, 0, 6)
+		nameLabel.Position = UDim2.new(0, 8, 0, 8)
 		nameLabel.Size = UDim2.new(1, -16, 0, 22)
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Font = Enum.Font.GothamBold
@@ -414,8 +430,19 @@ local function renderShop()
 		nameLabel.Text = item.Name
 		nameLabel.Parent = card
 
+		local rarityLabel = Instance.new("TextLabel")
+		rarityLabel.Position = UDim2.new(0, 8, 0, 32)
+		rarityLabel.Size = UDim2.new(1, -16, 0, 16)
+		rarityLabel.BackgroundTransparency = 1
+		rarityLabel.Font = Enum.Font.Gotham
+		rarityLabel.TextColor3 = (CosmeticsCatalog.Rarities[item.Rarity] and CosmeticsCatalog.Rarities[item.Rarity].Color) or Color3.fromRGB(180, 180, 180)
+		rarityLabel.TextScaled = true
+		rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
+		rarityLabel.Text = item.Rarity or "Common"
+		rarityLabel.Parent = card
+
 		local descLabel = Instance.new("TextLabel")
-		descLabel.Position = UDim2.new(0, 8, 0, 30)
+		descLabel.Position = UDim2.new(0, 8, 0, 50)
 		descLabel.Size = UDim2.new(1, -16, 0, 32)
 		descLabel.BackgroundTransparency = 1
 		descLabel.Font = Enum.Font.Gotham
@@ -432,22 +459,28 @@ local function renderShop()
 		local isEquipped = (localProfile.Equipped and localProfile.Equipped[item.Category] == item.Id)
 
 		local actionContainer = Instance.new("Frame")
-		actionContainer.Position = UDim2.new(0, 8, 0, 68)
-		actionContainer.Size = UDim2.new(1, -16, 0, 32)
+		actionContainer.Position = UDim2.new(0, 8, 0, 84)
+		actionContainer.Size = UDim2.new(1, -16, 0, 28)
 		actionContainer.BackgroundTransparency = 1
 		actionContainer.Parent = card
 
 		if isEquipped then
-			createButton(actionContainer, "EQUIPPED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
+			createButton(actionContainer, "✓ EQUIPPED", Color3.fromRGB(60, 140, 80), Color3.fromRGB(255, 255, 255), nil)
 		elseif isOwned then
 			createButton(actionContainer, "EQUIP", Color3.fromRGB(72, 170, 255), Color3.fromRGB(255, 255, 255), function()
 				actionRemote:FireServer("EquipItem", { Category = item.Category, ItemId = item.Id })
 			end)
 		else
-			local priceText = (item.Price == 0) and "FREE" or ("BUY 🪙 " .. item.Price)
-			createButton(actionContainer, priceText, Color3.fromRGB(255, 180, 50), Color3.fromRGB(25, 18, 36), function()
-				actionRemote:FireServer("BuyItem", item.Id)
-			end)
+			local priceText = (item.Price == 0) and "FREE" or ("🪙 " .. item.Price)
+			local canAfford = (localProfile.Braincoins or 0) >= item.Price
+			createButton(actionContainer, priceText,
+				canAfford and Color3.fromRGB(255, 180, 50) or Color3.fromRGB(80, 70, 90),
+				Color3.fromRGB(25, 18, 36),
+				canAfford and function()
+					actionRemote:FireServer("BuyItem", item.Id)
+					playSFX("BuyItem")
+				end or nil
+			)
 		end
 	end
 end
@@ -654,6 +687,446 @@ addToggle("Screen Shake", clientSettings.ScreenShake, function(val)
 	clientSettings.ScreenShake = val
 end)
 
+-- ==================== LOBBY PLAYER LIST PANEL ====================
+local lobbyPanel = Instance.new("Frame")
+lobbyPanel.Name = "LobbyPanel"
+lobbyPanel.AnchorPoint = Vector2.new(1, 0.5)
+lobbyPanel.Position = UDim2.new(1, -18, 0.5, 0)
+lobbyPanel.Size = UDim2.new(0, 220, 0.52, 0)
+lobbyPanel.BackgroundColor3 = Color3.fromRGB(22, 16, 32)
+lobbyPanel.BackgroundTransparency = 0.1
+lobbyPanel.Visible = false
+lobbyPanel.Parent = root
+rounded(lobbyPanel, 14)
+
+local lobbyTitle = Instance.new("TextLabel")
+lobbyTitle.Position = UDim2.new(0, 0, 0, 0)
+lobbyTitle.Size = UDim2.new(1, 0, 0, 36)
+lobbyTitle.BackgroundTransparency = 1
+lobbyTitle.Font = Enum.Font.GothamBlack
+lobbyTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+lobbyTitle.TextScaled = true
+lobbyTitle.Text = "⚖️ PLAYERS IN LOBBY"
+lobbyTitle.Parent = lobbyPanel
+
+local lobbyScroll = Instance.new("ScrollingFrame")
+lobbyScroll.Position = UDim2.new(0, 8, 0, 42)
+lobbyScroll.Size = UDim2.new(1, -16, 1, -50)
+lobbyScroll.BackgroundTransparency = 1
+lobbyScroll.BorderSizePixel = 0
+lobbyScroll.ScrollBarThickness = 4
+lobbyScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+lobbyScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+lobbyScroll.Parent = lobbyPanel
+
+local lobbyList = Instance.new("UIListLayout")
+lobbyList.Padding = UDim.new(0, 6)
+lobbyList.SortOrder = Enum.SortOrder.LayoutOrder
+lobbyList.Parent = lobbyScroll
+
+local function updateLobbyList(state)
+	lobbyScroll:ClearAllChildren()
+	local listLayout2 = Instance.new("UIListLayout")
+	listLayout2.Padding = UDim.new(0, 6)
+	listLayout2.Parent = lobbyScroll
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		local roleStr = ""
+		if state and state.Roles then
+			roleStr = state.Roles[p.UserId] and (" [" .. state.Roles[p.UserId] .. "]") or ""
+		end
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, 0, 0, 36)
+		row.BackgroundColor3 = (p == player) and Color3.fromRGB(55, 40, 80) or Color3.fromRGB(34, 25, 48)
+		row.Parent = lobbyScroll
+		rounded(row, 8)
+
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.fromScale(1, 1)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.GothamBold
+		lbl.TextColor3 = Color3.fromRGB(240, 230, 255)
+		lbl.TextScaled = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.Text = "  " .. p.DisplayName .. roleStr
+		lbl.Parent = row
+	end
+end
+
+-- ==================== TRIAL SIDE PANELS (WITNESS & EVIDENCE) ====================
+local trialSidePanel = Instance.new("Frame")
+trialSidePanel.Name = "TrialSidePanel"
+trialSidePanel.AnchorPoint = Vector2.new(0, 0.5)
+trialSidePanel.Position = UDim2.new(0, 18, 0.5, 0)
+trialSidePanel.Size = UDim2.new(0, 220, 0.6, 0)
+trialSidePanel.BackgroundColor3 = Color3.fromRGB(22, 16, 32)
+trialSidePanel.BackgroundTransparency = 0.1
+trialSidePanel.Visible = false
+trialSidePanel.Parent = root
+rounded(trialSidePanel, 14)
+
+local sideList = Instance.new("UIListLayout")
+sideList.Padding = UDim.new(0, 10)
+sideList.Parent = trialSidePanel
+
+-- Section: Argument Scores
+local scoreSection = Instance.new("Frame")
+scoreSection.Size = UDim2.new(1, 0, 0, 72)
+scoreSection.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+scoreSection.Parent = trialSidePanel
+rounded(scoreSection, 10)
+
+local scoreTitleLbl = Instance.new("TextLabel")
+scoreTitleLbl.Size = UDim2.new(1, 0, 0, 24)
+scoreTitleLbl.BackgroundTransparency = 1
+scoreTitleLbl.Font = Enum.Font.GothamBold
+scoreTitleLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+scoreTitleLbl.TextScaled = true
+scoreTitleLbl.Text = "⚔️ ARGUMENT SCORES"
+scoreTitleLbl.Parent = scoreSection
+
+local prosecutorScoreLbl = Instance.new("TextLabel")
+prosecutorScoreLbl.Position = UDim2.new(0, 8, 0, 26)
+prosecutorScoreLbl.Size = UDim2.new(1, -16, 0, 20)
+prosecutorScoreLbl.BackgroundTransparency = 1
+prosecutorScoreLbl.Font = Enum.Font.Gotham
+prosecutorScoreLbl.TextColor3 = Color3.fromRGB(255, 100, 100)
+prosecutorScoreLbl.TextScaled = true
+prosecutorScoreLbl.TextXAlignment = Enum.TextXAlignment.Left
+prosecutorScoreLbl.Text = "🔴 Prosecution: 0"
+prosecutorScoreLbl.Parent = scoreSection
+
+local defenseScoreLbl = Instance.new("TextLabel")
+defenseScoreLbl.Position = UDim2.new(0, 8, 0, 48)
+defenseScoreLbl.Size = UDim2.new(1, -16, 0, 20)
+defenseScoreLbl.BackgroundTransparency = 1
+defenseScoreLbl.Font = Enum.Font.Gotham
+defenseScoreLbl.TextColor3 = Color3.fromRGB(72, 224, 214)
+defenseScoreLbl.TextScaled = true
+defenseScoreLbl.TextXAlignment = Enum.TextXAlignment.Left
+defenseScoreLbl.Text = "🔵 Defense: 0"
+defenseScoreLbl.Parent = scoreSection
+
+-- Section: Active Evidence
+local evidenceSection = Instance.new("Frame")
+evidenceSection.Size = UDim2.new(1, 0, 0, 90)
+evidenceSection.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+evidenceSection.Parent = trialSidePanel
+rounded(evidenceSection, 10)
+
+local evidenceTitleLbl = Instance.new("TextLabel")
+evidenceTitleLbl.Size = UDim2.new(1, 0, 0, 24)
+evidenceTitleLbl.BackgroundTransparency = 1
+evidenceTitleLbl.Font = Enum.Font.GothamBold
+evidenceTitleLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+evidenceTitleLbl.TextScaled = true
+evidenceTitleLbl.Text = "📁 ACTIVE EXHIBIT"
+evidenceTitleLbl.Parent = evidenceSection
+
+local evidenceNameLbl = Instance.new("TextLabel")
+evidenceNameLbl.Position = UDim2.new(0, 8, 0, 26)
+evidenceNameLbl.Size = UDim2.new(1, -16, 0, 22)
+evidenceNameLbl.BackgroundTransparency = 1
+evidenceNameLbl.Font = Enum.Font.GothamBold
+evidenceNameLbl.TextColor3 = Color3.fromRGB(255, 180, 60)
+evidenceNameLbl.TextScaled = true
+evidenceNameLbl.TextXAlignment = Enum.TextXAlignment.Left
+evidenceNameLbl.Text = "None presented"
+evidenceNameLbl.Parent = evidenceSection
+
+local evidenceDescLbl = Instance.new("TextLabel")
+evidenceDescLbl.Position = UDim2.new(0, 8, 0, 50)
+evidenceDescLbl.Size = UDim2.new(1, -16, 0, 36)
+evidenceDescLbl.BackgroundTransparency = 1
+evidenceDescLbl.Font = Enum.Font.Gotham
+evidenceDescLbl.TextColor3 = Color3.fromRGB(210, 200, 220)
+evidenceDescLbl.TextScaled = true
+evidenceDescLbl.TextXAlignment = Enum.TextXAlignment.Left
+evidenceDescLbl.TextYAlignment = Enum.TextYAlignment.Top
+evidenceDescLbl.Text = "Present evidence to investigate."
+evidenceDescLbl.Parent = evidenceSection
+
+-- Section: Witness Responses Log
+local witnessSection = Instance.new("Frame")
+witnessSection.Size = UDim2.new(1, 0, 0, 160)
+witnessSection.BackgroundColor3 = Color3.fromRGB(34, 25, 48)
+witnessSection.Parent = trialSidePanel
+rounded(witnessSection, 10)
+
+local witnessTitleLbl = Instance.new("TextLabel")
+witnessTitleLbl.Size = UDim2.new(1, 0, 0, 24)
+witnessTitleLbl.BackgroundTransparency = 1
+witnessTitleLbl.Font = Enum.Font.GothamBold
+witnessTitleLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+witnessTitleLbl.TextScaled = true
+witnessTitleLbl.Text = "👁️ WITNESS LOG"
+witnessTitleLbl.Parent = witnessSection
+
+local witnessScroll = Instance.new("ScrollingFrame")
+witnessScroll.Position = UDim2.new(0, 4, 0, 26)
+witnessScroll.Size = UDim2.new(1, -8, 1, -30)
+witnessScroll.BackgroundTransparency = 1
+witnessScroll.BorderSizePixel = 0
+witnessScroll.ScrollBarThickness = 3
+witnessScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+witnessScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+witnessScroll.Parent = witnessSection
+
+local witnessLogList = Instance.new("UIListLayout")
+witnessLogList.Padding = UDim.new(0, 4)
+witnessLogList.Parent = witnessScroll
+
+local witnessResponseLog = {} -- last N entries
+
+local function appendWitnessLog(entry)
+	table.insert(witnessResponseLog, entry)
+	if #witnessResponseLog > 6 then table.remove(witnessResponseLog, 1) end
+
+	witnessScroll:ClearAllChildren()
+	local ll = Instance.new("UIListLayout")
+	ll.Padding = UDim.new(0, 4)
+	ll.Parent = witnessScroll
+
+	for _, e in ipairs(witnessResponseLog) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, 0, 0, 36)
+		row.BackgroundColor3 = e.Contradiction and Color3.fromRGB(80, 20, 20) or Color3.fromRGB(28, 20, 40)
+		row.Parent = witnessScroll
+		rounded(row, 6)
+
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.fromScale(1, 1)
+		t.BackgroundTransparency = 1
+		t.Font = Enum.Font.Gotham
+		t.TextColor3 = e.Contradiction and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(220, 215, 230)
+		t.TextScaled = true
+		t.TextXAlignment = Enum.TextXAlignment.Left
+		t.Text = "  " .. e.Witness .. ": " .. e.Answer .. (e.Contradiction and " ⚠️" or "")
+		t.Parent = row
+	end
+end
+
+-- ==================== POST-ROUND LEADERBOARD / AWARDS PANEL ====================
+local awardsPanel = Instance.new("Frame")
+awardsPanel.Name = "AwardsPanel"
+awardsPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+awardsPanel.Position = UDim2.fromScale(0.5, 0.5)
+awardsPanel.Size = UDim2.new(0.6, 0, 0.7, 0)
+awardsPanel.BackgroundColor3 = Color3.fromRGB(22, 16, 32)
+awardsPanel.BackgroundTransparency = 0.05
+awardsPanel.Visible = false
+awardsPanel.ZIndex = 6
+awardsPanel.Parent = root
+rounded(awardsPanel, 20)
+
+local awardsTitleLbl = Instance.new("TextLabel")
+awardsTitleLbl.Position = UDim2.new(0, 0, 0, 12)
+awardsTitleLbl.Size = UDim2.new(1, 0, 0, 44)
+awardsTitleLbl.BackgroundTransparency = 1
+awardsTitleLbl.Font = Enum.Font.GothamBlack
+awardsTitleLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+awardsTitleLbl.TextScaled = true
+awardsTitleLbl.Text = "🏆 COURT AWARDS"
+awardsTitleLbl.ZIndex = 7
+awardsTitleLbl.Parent = awardsPanel
+
+local awardsScroll = Instance.new("ScrollingFrame")
+awardsScroll.Position = UDim2.new(0.04, 0, 0, 68)
+awardsScroll.Size = UDim2.new(0.92, 0, 1, -84)
+awardsScroll.BackgroundTransparency = 1
+awardsScroll.BorderSizePixel = 0
+awardsScroll.ScrollBarThickness = 5
+awardsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+awardsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+awardsScroll.ZIndex = 7
+awardsScroll.Parent = awardsPanel
+
+local awardsListLayout = Instance.new("UIListLayout")
+awardsListLayout.Padding = UDim.new(0, 10)
+awardsListLayout.Parent = awardsScroll
+
+local function showAwardsPanel(awards)
+	if not awards or #awards == 0 then return end
+	playSFX("Reward")
+	awardsScroll:ClearAllChildren()
+	local ll = Instance.new("UIListLayout")
+	ll.Padding = UDim.new(0, 10)
+	ll.Parent = awardsScroll
+
+	for i, award in ipairs(awards) do
+		local card = Instance.new("Frame")
+		card.Size = UDim2.new(1, 0, 0, 68)
+		card.BackgroundColor3 = Color3.fromRGB(44, 32, 65)
+		card.ZIndex = 8
+		card.Parent = awardsScroll
+		rounded(card, 12)
+
+		local medal = Instance.new("TextLabel")
+		medal.Position = UDim2.new(0, 10, 0, 10)
+		medal.Size = UDim2.new(0, 44, 0, 44)
+		medal.BackgroundTransparency = 1
+		medal.Font = Enum.Font.GothamBlack
+		medal.TextScaled = true
+		medal.ZIndex = 9
+		medal.Text = i == 1 and "🥇" or (i == 2 and "🥈" or (i == 3 and "🥉" or "⭐"))
+		medal.Parent = card
+
+		local aTitle = Instance.new("TextLabel")
+		aTitle.Position = UDim2.new(0, 62, 0, 8)
+		aTitle.Size = UDim2.new(1, -70, 0, 28)
+		aTitle.BackgroundTransparency = 1
+		aTitle.Font = Enum.Font.GothamBold
+		aTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+		aTitle.TextScaled = true
+		aTitle.TextXAlignment = Enum.TextXAlignment.Left
+		aTitle.ZIndex = 9
+		aTitle.Text = award.Title or "Award"
+		aTitle.Parent = card
+
+		local aWinner = Instance.new("TextLabel")
+		aWinner.Position = UDim2.new(0, 62, 0, 36)
+		aWinner.Size = UDim2.new(1, -70, 0, 24)
+		aWinner.BackgroundTransparency = 1
+		aWinner.Font = Enum.Font.Gotham
+		aWinner.TextColor3 = Color3.fromRGB(220, 220, 240)
+		aWinner.TextScaled = true
+		aWinner.TextXAlignment = Enum.TextXAlignment.Left
+		aWinner.ZIndex = 9
+		aWinner.Text = (award.Winner or "???") .. " — +" .. (award.Bonus or 0) .. " 🪙"
+		aWinner.Parent = card
+	end
+
+	awardsPanel.Visible = true
+	TweenService:Create(awardsPanel, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0.6, 0, 0.7, 0),
+	}):Play()
+
+	task.delay(10, function()
+		if awardsPanel.Parent then
+			TweenService:Create(awardsPanel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				BackgroundTransparency = 1,
+			}):Play()
+			task.wait(0.4)
+			awardsPanel.Visible = false
+			awardsPanel.BackgroundTransparency = 0.05
+		end
+	end)
+end
+
+-- ==================== SPECTATOR FOLLOW-CAMERA ====================
+local spectatorTarget = nil
+local spectatorFollowActive = false
+local spectatorTargetIndex = 1
+
+local function getFollowablePlayers()
+	local list = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character and p.Character.PrimaryPart then
+			table.insert(list, p)
+		end
+	end
+	return list
+end
+
+local function startSpectatorCamera()
+	spectatorFollowActive = true
+	task.spawn(function()
+		while spectatorFollowActive do
+			local targets = getFollowablePlayers()
+			if #targets > 0 then
+				spectatorTargetIndex = ((spectatorTargetIndex - 1) % #targets) + 1
+				local targetChar = targets[spectatorTargetIndex].Character
+				if targetChar and targetChar.PrimaryPart then
+					local targetPos = targetChar.PrimaryPart.Position
+					local desiredCF = CFrame.new(targetPos + Vector3.new(0, 8, 14), targetPos + Vector3.new(0, 2, 0))
+					TweenService:Create(camera, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						CFrame = desiredCF,
+					}):Play()
+				end
+			end
+			task.wait(0.05)
+		end
+	end)
+end
+
+local function stopSpectatorCamera()
+	spectatorFollowActive = false
+	camera.CameraType = Enum.CameraType.Custom
+end
+
+-- Spectator next/prev target UI
+local spectatorUI = Instance.new("Frame")
+spectatorUI.Name = "SpectatorUI"
+spectatorUI.AnchorPoint = Vector2.new(0.5, 1)
+spectatorUI.Position = UDim2.fromScale(0.5, 0.86)
+spectatorUI.Size = UDim2.new(0, 300, 0, 50)
+spectatorUI.BackgroundColor3 = Color3.fromRGB(22, 16, 32)
+spectatorUI.BackgroundTransparency = 0.15
+spectatorUI.Visible = false
+spectatorUI.Parent = root
+rounded(spectatorUI, 14)
+
+local specLayout = Instance.new("UIListLayout")
+specLayout.FillDirection = Enum.FillDirection.Horizontal
+specLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+specLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+specLayout.Padding = UDim.new(0, 10)
+specLayout.Parent = spectatorUI
+
+local prevSpecBtn = Instance.new("Frame")
+prevSpecBtn.Size = UDim2.new(0, 80, 0, 36)
+prevSpecBtn.BackgroundTransparency = 1
+prevSpecBtn.Parent = spectatorUI
+createButton(prevSpecBtn, "◀ PREV", Color3.fromRGB(55, 40, 80), Color3.fromRGB(240, 230, 255), function()
+	local targets = getFollowablePlayers()
+	spectatorTargetIndex = ((spectatorTargetIndex - 2) % math.max(1, #targets)) + 1
+end)
+
+local specWatchingLbl = Instance.new("TextLabel")
+specWatchingLbl.Size = UDim2.new(0, 110, 0, 36)
+specWatchingLbl.BackgroundTransparency = 1
+specWatchingLbl.Font = Enum.Font.GothamBold
+specWatchingLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+specWatchingLbl.TextScaled = true
+specWatchingLbl.Text = "👁️ SPECTATING"
+specWatchingLbl.Parent = spectatorUI
+
+local nextSpecBtn = Instance.new("Frame")
+nextSpecBtn.Size = UDim2.new(0, 80, 0, 36)
+nextSpecBtn.BackgroundTransparency = 1
+nextSpecBtn.Parent = spectatorUI
+createButton(nextSpecBtn, "NEXT ▶", Color3.fromRGB(55, 40, 80), Color3.fromRGB(240, 230, 255), function()
+	local targets = getFollowablePlayers()
+	spectatorTargetIndex = (spectatorTargetIndex % math.max(1, #targets)) + 1
+end)
+
+-- ==================== BRIEFING CINEMATIC CAMERA ====================
+local function playCinematicBriefing()
+	local prevType = camera.CameraType
+	camera.CameraType = Enum.CameraType.Scriptable
+
+	local shots = {
+		{ CFrame.new(0, 20, 55), CFrame.new(0, 12, 36) },   -- Looking at judge bench from afar
+		{ CFrame.new(-40, 10, 15), CFrame.new(0, 8, 0) },   -- Prosecution podium angle
+		{ CFrame.new(40, 10, 15), CFrame.new(0, 8, 0) },    -- Defense podium angle
+		{ CFrame.new(0, 8, -15), CFrame.new(0, 8, 36) },    -- Defendant looking at judge
+	}
+
+	task.spawn(function()
+		for _, shot in ipairs(shots) do
+			local from = shot[1]
+			local lookAt = shot[2]
+			local cf = CFrame.lookAt(from, lookAt.Position)
+			TweenService:Create(camera, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+				CFrame = cf,
+			}):Play()
+			task.wait(1.4)
+		end
+		-- Return to player
+		camera.CameraType = prevType
+	end)
+end
+
 -- ==================== DRAMATIC OVERLAYS & ROLE INTRO ====================
 local function showDramaticRoleIntro(role, case)
 	local roleObjectives = {
@@ -811,6 +1284,9 @@ local function render(state)
 		if state.Phase == "Briefing" then
 			local role = state.Roles and state.Roles[player.UserId] or "Spectator"
 			showDramaticRoleIntro(role, state.Case)
+			playCinematicBriefing()
+		elseif state.Phase == "Rewards" and state.Awards and #state.Awards > 0 then
+			showAwardsPanel(state.Awards)
 		end
 	end
 
@@ -819,12 +1295,77 @@ local function render(state)
 	local role = state.Roles and state.Roles[player.UserId] or "Spectator"
 	local case = state.Case
 
+	local isLobby = (state.Phase == "Lobby")
+	local isTrial = (state.Phase == "Trial")
+	local isVoting = (state.Phase == "Voting")
+	local isSpectator = (role == "Spectator")
+	local isJury = (role == "Jury")
+	local isJudge = (role == "Judge")
+	local isLawyer = (role == "Prosecutor" or role == "Defense")
+	local isDefendant = (role == "Defendant")
+
+	-- Lobby player list
+	lobbyPanel.Visible = isLobby
+	if isLobby then
+		updateLobbyList(state)
+	end
+
+	-- Trial side panel
+	trialSidePanel.Visible = isTrial
+	if isTrial then
+		-- Update argument scores
+		local pScore = state.ArgumentScores and state.ArgumentScores.Prosecutor or 0
+		local dScore = state.ArgumentScores and state.ArgumentScores.Defense or 0
+		prosecutorScoreLbl.Text = "🔴 Prosecution: " .. pScore
+		defenseScoreLbl.Text = "🔵 Defense: " .. dScore
+
+		-- Update active evidence
+		if state.EvidenceInspection and state.EvidenceInspection.Name then
+			evidenceNameLbl.Text = "📄 " .. state.EvidenceInspection.Name
+			evidenceDescLbl.Text = state.EvidenceInspection.Detail or ""
+		elseif case and state.ActiveEvidence and case.Evidence and case.Evidence[state.ActiveEvidence] then
+			local ev = case.Evidence[state.ActiveEvidence]
+			evidenceNameLbl.Text = "📄 " .. ev.Name
+			evidenceDescLbl.Text = ev.Description or ""
+		else
+			evidenceNameLbl.Text = "No exhibit presented"
+			evidenceDescLbl.Text = "Present evidence to investigate."
+		end
+
+		-- Append new witness responses
+		if state.WitnessResponses then
+			local prevCount = #witnessResponseLog
+			local newCount = #state.WitnessResponses
+			if newCount > prevCount then
+				for i = prevCount + 1, newCount do
+					appendWitnessLog(state.WitnessResponses[i])
+				end
+			elseif newCount == 0 then
+				witnessResponseLog = {}
+				witnessScroll:ClearAllChildren()
+				local ll = Instance.new("UIListLayout")
+				ll.Padding = UDim.new(0, 4)
+				ll.Parent = witnessScroll
+			end
+		end
+	end
+
+	-- Spectator follow camera
+	if isSpectator and not spectatorFollowActive then
+		camera.CameraType = Enum.CameraType.Scriptable
+		startSpectatorCamera()
+		spectatorUI.Visible = true
+	elseif not isSpectator and spectatorFollowActive then
+		stopSpectatorCamera()
+		spectatorUI.Visible = false
+	end
+
 	if state.Phase == "Lobby" then
-		detailText.Text = "Waiting for players to begin the next trial..."
+		detailText.Text = string.format("Waiting for players... (%d/%d)", #Players:GetPlayers(), Config.MinPlayers)
 	elseif state.Phase == "Briefing" and case then
 		detailText.Text = string.format("[%s] CASE: %s - %s", role:upper(), case.Crime, case.Briefing)
 	elseif state.Phase == "Trial" and case then
-		local ev = (state.ActiveEvidence and case.Evidence[state.ActiveEvidence])
+		local ev = (state.ActiveEvidence and case.Evidence and case.Evidence[state.ActiveEvidence])
 		local evText = ev and (" | EXHIBIT: " .. ev.Name) or ""
 		local pScore = state.ArgumentScores and state.ArgumentScores.Prosecutor or 0
 		local dScore = state.ArgumentScores and state.ArgumentScores.Defense or 0
@@ -843,13 +1384,6 @@ local function render(state)
 	end
 
 	-- Role action button visibility
-	local isJury = (role == "Jury")
-	local isJudge = (role == "Judge")
-	local isLawyer = (role == "Prosecutor" or role == "Defense")
-	local isDefendant = (role == "Defendant")
-	local isTrial = (state.Phase == "Trial")
-	local isVoting = (state.Phase == "Voting")
-
 	guiltyBtn.Visible = isVoting and isJury
 	notGuiltyBtn.Visible = isVoting and isJury
 
@@ -916,6 +1450,8 @@ cosmeticEffectRemote.OnClientEvent:Connect(function(effectType, arg1, arg2)
 		showDramaticObjection()
 	elseif effectType == "Verdict" and arg1 then
 		showDramaticVerdict(arg1)
+	elseif effectType == "Awards" and type(arg1) == "table" then
+		showAwardsPanel(arg1)
 	end
 end)
 
