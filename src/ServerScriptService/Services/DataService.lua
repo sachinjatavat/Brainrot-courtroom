@@ -7,6 +7,7 @@ local Progression = require(SharedFolder:WaitForChild("Progression"))
 
 local DataService = {}
 local storeInstance = nil
+
 local function getStore()
 	if storeInstance then return storeInstance end
 	local success, result = pcall(function()
@@ -20,9 +21,19 @@ local function getStore()
 	return storeInstance
 end
 
+-- Profiles in memory and their metadata
 local profiles = {}
+local profileMeta = {} -- [player] = { IsLoaded = bool, SafeToSave = bool, SessionLock = table, Retries = number }
 local saving = {}
 local syncCallback = nil
+
+local VALID_CATEGORIES = {
+	Gavel = true,
+	Briefcase = true,
+	Aura = true,
+	Title = true,
+	Theme = true,
+}
 
 local DEFAULT = {
 	Braincoins = 150,
@@ -47,6 +58,7 @@ local DEFAULT = {
 		Progress = {},
 		Claimed = {},
 	},
+	ProcessedRewards = {}, -- Idempotency set to prevent duplicate reward processing
 	LastDaily = 0,
 }
 
@@ -68,11 +80,13 @@ local function sanitizeData(data)
 	clean.TrialsPlayed = math.max(0, tonumber(data.TrialsPlayed) or 0)
 	clean.LastDaily = tonumber(data.LastDaily) or 0
 
-	-- Unlocked items
+	-- Unlocked items validation
 	local unlockedSet = {}
 	if type(data.Unlocked) == "table" then
 		for _, id in pairs(data.Unlocked) do
-			if type(id) == "string" then unlockedSet[id] = true end
+			if type(id) == "string" and CosmeticsCatalog.IsValid(id) then
+				unlockedSet[id] = true
+			end
 		end
 	end
 	for _, id in ipairs(DEFAULT.Unlocked) do
@@ -83,12 +97,19 @@ local function sanitizeData(data)
 		table.insert(clean.Unlocked, id)
 	end
 
-	-- Equipped slots
+	-- Equipped slots validation (ensure category matching)
 	clean.Equipped = copy(DEFAULT.Equipped)
 	if type(data.Equipped) == "table" then
 		for category, id in pairs(data.Equipped) do
-			if type(category) == "string" and type(id) == "string" then
-				clean.Equipped[category] = id
+			if VALID_CATEGORIES[category] and type(id) == "string" then
+				if id == "none" then
+					clean.Equipped[category] = "none"
+				else
+					local item = CosmeticsCatalog.Get(id)
+					if item and item.Category == category and unlockedSet[id] then
+						clean.Equipped[category] = id
+					end
+				end
 			end
 		end
 	end
@@ -116,6 +137,14 @@ local function sanitizeData(data)
 		end
 	end
 
+	-- Processed Rewards
+	clean.ProcessedRewards = {}
+	if type(data.ProcessedRewards) == "table" then
+		for token, val in pairs(data.ProcessedRewards) do
+			if val == true then clean.ProcessedRewards[token] = true end
+		end
+	end
+
 	return clean
 end
 
@@ -129,22 +158,94 @@ local function notifySync(player)
 	end
 end
 
+-- Helper: Exponential backoff retry
+local function retryWithBackoff(fn, maxRetries, baseDelay)
+	maxRetries = maxRetries or 3
+	baseDelay = baseDelay or 0.5
+	local lastErr
+	for attempt = 1, maxRetries do
+		local success, result = pcall(fn)
+		if success then
+			return true, result
+		end
+		lastErr = result
+		if attempt < maxRetries then
+			task.wait(baseDelay * (2 ^ (attempt - 1)))
+		end
+	end
+	return false, lastErr
+end
+
 function DataService.Load(player)
 	if not player or not player.Parent then return nil end
-	local data
+
+	local meta = {
+		IsLoaded = false,
+		SafeToSave = false,
+		SessionLock = nil,
+		Retries = 0,
+	}
+	profileMeta[player] = meta
+
 	local ds = getStore()
-	local success, result
-	if ds then
-		success, result = pcall(function() return ds:GetAsync("Player_" .. player.UserId) end)
-	else
-		success, result = false, "DataStore unavailable"
-	end
-	if success and type(result) == "table" then
-		data = sanitizeData(result)
-	else
+	local data = nil
+
+	if not ds then
+		-- Offline / Mock mode (e.g. unpublished Studio or offline testing)
 		data = sanitizeData({})
-		if not success and ds then warn("[DataService] Load failed:", result) end
+		meta.IsLoaded = true
+		meta.SafeToSave = true
+		profiles[player] = data
+		notifySync(player)
+		return data
 	end
+
+	-- Online mode with retry and session locking
+	local lockAcquired = false
+	local loadSuccess, loadResult = retryWithBackoff(function()
+		return ds:UpdateAsync("Player_" .. player.UserId, function(existing)
+			local now = os.time()
+			if existing and type(existing) == "table" and existing._SessionLock then
+				local lock = existing._SessionLock
+				-- Check if locked by another server (lease duration: 15 minutes = 900s)
+				if lock.JobId and lock.JobId ~= game.JobId and (now - (lock.Time or 0)) < 900 then
+					return nil -- Signal active lock conflict
+				end
+			end
+
+			-- Safe to acquire lock
+			local profileData = existing or sanitizeData({})
+			profileData._SessionLock = {
+				JobId = game.JobId,
+				Time = now,
+			}
+			lockAcquired = true
+			return profileData
+		end)
+	end, 3, 1)
+
+	if loadSuccess and lockAcquired and type(loadResult) == "table" then
+		data = sanitizeData(loadResult)
+		meta.IsLoaded = true
+		meta.SafeToSave = true
+		meta.SessionLock = loadResult._SessionLock
+	elseif loadSuccess and not lockAcquired then
+		-- Profile is actively locked by another server
+		warn("[DataService] Player " .. player.UserId .. " profile is locked by another server session.")
+		meta.IsLoaded = false
+		meta.SafeToSave = false -- NEVER overwrite!
+		if player.Parent then
+			player:Kick("Your profile is currently open in another session. Please wait a minute and rejoin.")
+		end
+		return nil
+	else
+		-- Network / DataStore failure: DO NOT OVERWRITE!
+		warn("[DataService] Load failed for Player " .. player.UserId .. " after retries:", loadResult)
+		meta.IsLoaded = false
+		meta.SafeToSave = false -- NEVER save a failed load to prevent data wiping!
+		data = sanitizeData({}) -- Guest fallback
+	end
+
 	if not player.Parent then return nil end
 	profiles[player] = data
 	notifySync(player)
@@ -153,6 +254,10 @@ end
 
 function DataService.Get(player)
 	return profiles[player]
+end
+
+function DataService.GetMeta(player)
+	return profileMeta[player]
 end
 
 function DataService.AddCoins(player, amount)
@@ -197,16 +302,41 @@ function DataService.BuyItem(player, itemId)
 	return true, item
 end
 
+-- BUG 6 FIX: Strict category, existence, and ownership validation
 function DataService.EquipItem(player, category, itemId)
 	local data = profiles[player]
 	if not data then return false, "No profile" end
 
-	if itemId ~= "none" then
-		local owned = false
-		for _, id in ipairs(data.Unlocked) do
-			if id == itemId then owned = true; break end
-		end
-		if not owned then return false, "Item not owned" end
+	-- 1. Validate Category
+	if not VALID_CATEGORIES[category] then
+		return false, "Invalid category: " .. tostring(category)
+	end
+
+	-- 2. Handle Unequip ("none")
+	if itemId == "none" then
+		data.Equipped[category] = "none"
+		notifySync(player)
+		return true
+	end
+
+	-- 3. Validate Item Existence
+	local item = CosmeticsCatalog.Get(itemId)
+	if not item then
+		return false, "Item does not exist: " .. tostring(itemId)
+	end
+
+	-- 4. Validate Category Match
+	if item.Category ~= category then
+		return false, string.format("Category mismatch: item %s is %s, not %s", itemId, item.Category, category)
+	end
+
+	-- 5. Validate Ownership
+	local owned = false
+	for _, id in ipairs(data.Unlocked) do
+		if id == itemId then owned = true break end
+	end
+	if not owned then
+		return false, "Unauthorized item: not owned by player"
 	end
 
 	data.Equipped[category] = itemId
@@ -283,13 +413,13 @@ function DataService.ClaimAchievement(player, achId)
 	DataService.AddXP(player, ach.RewardXP)
 
 	if ach.RewardTitle then
-		-- Unlock title cosmetic
+		local titleId = "title_" .. ach.RewardTitle:lower():gsub("%s+", "_")
 		local alreadyHas = false
 		for _, id in ipairs(data.Unlocked) do
-			if id == "title_" .. ach.RewardTitle:lower():gsub("%s+", "_") then alreadyHas = true break end
+			if id == titleId then alreadyHas = true break end
 		end
-		if not alreadyHas then
-			table.insert(data.Unlocked, "title_" .. ach.RewardTitle:lower():gsub("%s+", "_"))
+		if not alreadyHas and CosmeticsCatalog.IsValid(titleId) then
+			table.insert(data.Unlocked, titleId)
 		end
 	end
 
@@ -309,33 +439,101 @@ function DataService.ClaimDaily(player)
 	return true
 end
 
+-- BUG 1 FIX: Duplicate reward prevention via idempotency token
+function DataService.ProcessReward(player, rewardToken, coins, xp)
+	local data = profiles[player]
+	if not data then return false, "No profile" end
+	if not rewardToken or type(rewardToken) ~= "string" then return false, "Invalid token" end
+
+	if data.ProcessedRewards[rewardToken] then
+		return false, "Duplicate reward prevented: already processed"
+	end
+
+	data.ProcessedRewards[rewardToken] = true
+	if coins and coins > 0 then DataService.AddCoins(player, coins) end
+	if xp and xp > 0 then DataService.AddXP(player, xp) end
+	return true
+end
+
+-- BUG 1 FIX: Save safety check, retry backoff, and session lock release
 function DataService.Save(player)
 	local data = profiles[player]
-	if not data or saving[player] then return false end
+	local meta = profileMeta[player]
+
+	if not data or saving[player] then return false, "Busy or no data" end
+
+	-- CRITICAL: Abort if profile was not safely loaded!
+	if not meta or not meta.SafeToSave then
+		warn("[DataService] Save aborted for Player " .. tostring(player and player.UserId) .. ": profile was not safely loaded (preventing data wiping).")
+		return false, "Unsafe to save"
+	end
+
 	local ds = getStore()
-	if not ds then return false end
+	if not ds then return true end -- Mock mode passes
+
 	saving[player] = true
-	local success, errorMessage = pcall(function()
-		ds:UpdateAsync("Player_" .. player.UserId, function()
-			return copy(data)
+
+	local success, err = retryWithBackoff(function()
+		return ds:UpdateAsync("Player_" .. player.UserId, function(current)
+			-- Verify session lock ownership before writing
+			if current and current._SessionLock then
+				if current._SessionLock.JobId and current._SessionLock.JobId ~= game.JobId then
+					local now = os.time()
+					if (now - (current._SessionLock.Time or 0)) < 900 then
+						error("Session lock conflict: another server holds the lock")
+					end
+				end
+			end
+
+			local toSave = copy(data)
+			-- Release session lock when player leaves or on server shutdown
+			if not player.Parent then
+				toSave._SessionLock = nil
+			else
+				toSave._SessionLock = {
+					JobId = game.JobId,
+					Time = os.time(),
+				}
+			end
+			return toSave
 		end)
-	end)
-	if not success then warn("[DataService] Save failed:", errorMessage) end
+	end, 3, 1)
+
 	saving[player] = nil
+	if not success then
+		warn("[DataService] Save failed for Player " .. player.UserId .. ":", err)
+	end
 	return success
 end
 
 function DataService.Remove(player)
 	DataService.Save(player)
 	profiles[player] = nil
+	profileMeta[player] = nil
 end
 
 function DataService.Start()
 	Players.PlayerAdded:Connect(function(player) DataService.Load(player) end)
 	Players.PlayerRemoving:Connect(DataService.Remove)
 	for _, player in ipairs(Players:GetPlayers()) do task.spawn(DataService.Load, player) end
+
+	-- BUG 1 FIX: Safe shutdown handling all active players concurrently
 	game:BindToClose(function()
-		for _, player in ipairs(Players:GetPlayers()) do DataService.Save(player) end
+		local activePlayers = Players:GetPlayers()
+		if #activePlayers == 0 then return end
+
+		local completed = 0
+		for _, player in ipairs(activePlayers) do
+			task.spawn(function()
+				DataService.Save(player)
+				completed += 1
+			end)
+		end
+
+		local startTime = os.clock()
+		while completed < #activePlayers and (os.clock() - startTime) < 25 do
+			task.wait(0.2)
+		end
 	end)
 end
 

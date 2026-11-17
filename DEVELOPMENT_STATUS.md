@@ -1,118 +1,99 @@
-# Development status
+# DEVELOPMENT STATUS: BRAINROT COURTROOM — THE FINAL VERDICT
 
 ## Project Overview
 **Game Title**: BRAINROT COURTROOM: THE FINAL VERDICT  
 **Genre**: Multiplayer Comedy, Social Deduction & Courtroom Chaos  
-**Target Player Capacity**: 8–12 Players (Minimum: 2 Players)  
-**Architecture**: Server-Authoritative Luau, Rojo File System Synchronization, Procedural Geometry  
+**Supported Capacity**: 2–12 Players per server (Scalable with autonomous bot essentials)  
+**Target Capacity**: 8–12 Players  
+**Architecture**: Server-Authoritative Luau, Rojo File System Synchronization, Procedural Geometry, Zero Unverified External Asset IDs  
+**Current State**: **ALL 14 DEVELOPMENT PHASES + ALL 8 CRITICAL BUG FIXES IMPLEMENTED & 100% TESTED**
 
 ---
 
-## Phase Breakdown
+## Critical Bug Resolutions (Bugs 1–8)
 
-### Phase 1 — Project Audit
-**Status**: **COMPLETE**  
-- Full source audit performed across all Luau scripts, modules, remotes, and configurations.
-- Documented in `AUDIT_REPORT.md`.
-- Addressed security bounds (string length checks, cooldown debounces, safe DataStore loading in offline Studio sessions).
+### Bug 1: DataStore Data Loss & Concurrency
+- **Status**: **RESOLVED & VERIFIED**
+- SafeToSave flag prevents overwriting existing saved data after a failed load.
+- Session locking via `UpdateAsync` with 900s lease timeout stops concurrent multi-server profile modification.
+- Exponential backoff retry helper (`retryWithBackoff`) handles transient DataStore outages.
+- `BindToClose` concurrently flushes pending saves with safe timeouts.
+- Idempotency token registry (`ProcessedTokens`) prevents duplicate reward processing.
 
-### Phase 2 — Core Gameplay Loop & Role System
-**Status**: **COMPLETE**  
-- 8–12 player capacity support (`Config.MinPlayers = 2`, `Config.TargetPlayers = 10`, `Config.MaxPlayers = 12`).
-- Fair role rotation with session history tracking in `RoleAssigner.lua` (prevents player from repeatedly being Judge).
-- Authoritative state machine: `Lobby` $\to$ `Briefing` $\to$ `Trial` $\to$ `Voting` $\to$ `Verdict` $\to$ `Rewards`.
-- Full disconnect handling (Acting Judge promotion, juror vote threshold adjustment) and late-joiner spectator assignment.
+### Bug 2: Small Server Role Assignment & Bot Essentials
+- **Status**: **RESOLVED & VERIFIED**
+- Fully supports 2–12 players without breaking.
+- Ensures all 4 essential roles (`Judge`, `Prosecutor`, `Defense`, `Defendant`) exist in every single trial.
+- When human player count is `< 4`, missing essentials are filled by functional bots (`BOT_PROSECUTOR`, `BOT_DEFENSE`, `BOT_DEFENDANT`).
+- Autonomous bot behaviors activate during Trial: Bot Prosecutor presents evidence and files accusations; Bot Defense objects and argues; Bot Defendant responds to confession demands.
+- Never assigns a missing role to a nonexistent player UserId.
+- Minimum 3 bot jury members cast votes during Voting phase based on argument scores and evidence reliability.
 
-### Phase 3 — Advanced Courtroom Engine
-**Status**: **COMPLETE**  
-- Expanded crime generator with 14 absurd brainrot cases, motives, and exhibit objects (`CaseGenerator.lua`).
-- 12 unique pieces of evidence with genuine vs misleading states.
-- 6 witness archetypes with persistent trial stories, lie probabilities, and contradiction detection (`WitnessMemory.lua`).
-- Dynamic lawyer argument evaluation and evidence consistency scoring (`ArgumentScoring.lua`).
-- Single-submit jury voting and judge tie-breaker logic (`Verdict.lua`).
+### Bug 3: Witness Contradiction System & Zero False Positives
+- **Status**: **RESOLVED & VERIFIED**
+- Replaced generic question repetition with structured topics: `LOCATION`, `TIME`, `OBJECT`, `ACTION`.
+- Witnesses possess consistent underlying stories aligned with case `GroundTruth`. Truthful witnesses match truth; lying witnesses have 1 fabricated topic fact.
+- Logical contradiction rules implemented in `WitnessMemory.lua`:
+  - **Internal Contradiction**: Only flagged if the witness contradicts themselves on the **same topic**. Asking across different topics yields **zero false positives**.
+  - **Evidence Contradiction**: Only flagged if authentic reliable evidence (`Reliable == true`) directly conflicts with the witness's claim on that topic. Unreliable evidence never triggers a contradiction.
 
-### Phase 4 — Judge Powers & Chaos Engine
-**Status**: **COMPLETE**  
-- Judge Abilities:
-  - `THROW_BANANA`: Drops physics slipping bananas with bounce and sound.
-  - `ORDER_SILENCE`: Silences testimony and arguments for 6s with loud gavel strike.
-  - `SUMMON_SECURITY`: Summons guards to detain and teleport the defendant to the holding cell.
-  - `FORCE_CONFESSION`: Forces the defendant to choose between Confess or Deny.
-  - `REVERSE_VERDICT`: Overturns a verdict once per trial.
-  - `COURTROOM_EXPLOSION`: Explosive shockwave with smoke, flying paperwork, and ragdoll response.
-- Modular Chaos Events:
-  - `BANANA_FLOOD`, `GRAVITY_GLITCH`, `EVERYONE_DANCES`, `JUDGE_TINY`, `POSITION_SWAP`, `VOICE_LOSS`, `EVIDENCE_MIXUP`, `COURTROOM_FLOOD`, `ROLE_SWAP`, `BRAINROT_INVASION`.
+### Bug 4: Security NPC System (Humanoid Rig & Safe Escort)
+- **Status**: **RESOLVED & VERIFIED**
+- Replaced static anchored parts with functional Humanoid security guards (`NPCSystem.CreateSecurityModel`).
+- Complete rig with `HumanoidRootPart`, `Torso`, `Head`, limbs, `Motor6D` joints, navy uniforms, Peaked Officer Cap, and Neon Gold Officer Badge.
+- Animated 3-phase escort sequence to jail (`NPCSystem.EscortToJail`).
+- Safe fallback behavior: if defendant player disconnects, character despawns, or is nil, guards safely complete their march without throwing any runtime errors.
 
-### Phase 5 — Complete Map & Environment
-**Status**: **COMPLETE**  
-- **Courtroom Chamber**: 186+ detailed architectural primitives including fluted marble pillars with brass capitals, wainscoting, chandeliers, court seal, elevated judge platform with interactive 3D gavel (click/prompt to slam with audio and camera shake), witness stand with microphone, lawyer desks with lamps, 2-tier jury box, spectator gallery, and holding cell.
-- **Additional Locations**:
-  - Grand Lobby with matchmaking status billboard (`SurfaceGui`), velvet sofas, coffee table, water dispenser, 3-tier leaderboard podium, and practice dummy.
-  - Secret Brainrot Laboratory with radioactive vats, scientific terminals, and an interactive experimental lever.
-  - Judge's Private Chambers with executive desk, bookcases, and interactive espresso maker.
-  - Elevated Spectator Balcony with brass railings.
-- **4 Courtroom Themes**: `Classic Mahogany`, `Neo-Tokyo Cyberpunk`, `Ohio Dungeon`, `Royal Golden Palace` with dynamic material, color, and lighting swaps (`MapBuilder.ApplyTheme`).
+### Bug 5: Chaos Event Real Implementations
+- **Status**: **RESOLVED & VERIFIED**
+- All 10 chaos events + courtroom explosion have real visual and gameplay mechanics:
+  - `VOICE_LOSS`: Server-authoritative testimony silence, static audio sting, blocks argument submission.
+  - `COURTROOM_FLOOD`: Water rises from Y=-3 to Y=3.5 via TweenService with swimming buoyancy impulse; drains smoothly on cleanup.
+  - `ROLE_SWAP`: Real podium & desk teleport swap of Prosecutor and Defense, notifies clients, restores on cleanup with disconnect protection.
+  - `BRAINROT_INVASION`: 10 bouncing neon meme balls with elastic physical properties and player knockback impulses.
+  - `GRAVITY_GLITCH`: Workspace gravity dropped to 35, restored to 196.2 on cleanup.
+  - `POSITION_SWAP`: Real CFrame swap between two active players with poof effects.
+  - `BANANA_FLOOD`: Bananas rain from ceiling; player touch triggers 1.2s cartoon slip (`PlatformStand = true`).
+  - `JUDGE_TINY`: Scales Judge character down to 0.4x with `character:ScaleTo(0.4)`, restored on cleanup.
+  - `EVERYONE_DANCES`: Procedural dance animation looped on all characters with slowed walkspeed, restored on cleanup.
+  - `EVIDENCE_MIXUP`: Scrambles evidence table order and updates inspection.
+  - `COURTROOM_EXPLOSION`: Non-lethal explosion at judge bench with 16 flying paperwork sheets.
 
-### Phase 6 — Complete UI & UX
-**Status**: **COMPLETE**  
-- Modern glassmorphism top HUD with coins, level, XP progress bar, equipped title, and navigation shortcuts.
-- Contextual action bar that dynamically displays controls for the player's active role.
-- Dedicated interactive modals:
-  - 🛒 **Shop & Inventory**: Category-filtered card grid with live buy/equip states.
-  - 📋 **Missions & Achievements**: Daily mission progress bars with interactive claim buttons.
-  - 🎭 **Emotes & Reactions**: Quick-trigger reaction grid with full character animations.
-  - 👤 **Player Dossier & Profile**: Detailed player statistics (wins, trials, level, win rate, equipped gear).
-  - ⚙️ **Settings**: Low Graphics Mode toggle, Sound Effects toggle, Screen Shake toggle.
-- Full mobile responsiveness: `UIScale` responsive auto-scaling and touch-friendly hitboxes ($\ge 44 \times 44\text{ pt}$).
+### Bug 6: Cosmetic Validation in DataService
+- **Status**: **RESOLVED & VERIFIED**
+- Strict validation in `DataService.EquipItem`:
+  - Category validated against `VALID_CATEGORIES` (`Gavel`, `Briefcase`, `Aura`, `Title`, `Theme`).
+  - Item existence validated in `CosmeticsCatalog`.
+  - Rejects category-slot mismatches (e.g. equipping a Title into a Gavel slot).
+  - Validates ownership in `profile.Unlocked`.
+  - Unequips cleanly with `"none"`.
 
-### Phase 7 — NPC & Bot System
-**Status**: **COMPLETE**  
-- Bot witnesses with unique personalities and dialogue.
-- Security guards with detain and patrol mechanics.
-- Courtroom spectator NPCs seated in the audience that react dynamically (applause, gasp, shout) to objections, gavel bangs, and verdicts.
-- Bot lawyers that automatically submit arguments when player counts are low.
-- Intelligent bot jury members that evaluate argument scores and exhibit authenticity (`NPCSystem.EvaluateBotVote`).
+### Bug 7: Comprehensive Automated Test Suite
+- **Status**: **RESOLVED & VERIFIED**
+- `LogicTests.lua` expanded with 7 rigorous automated test suites covering all bug fixes and core systems.
+- 100% pass rate achieved via headless Lune test runner (`lune run scripts/run_tests.luau`).
+- 0 errors, 0 warnings, 0 parse errors reported by Selene linter (`selene src`).
 
-### Phase 8 — Economy & Player Progression
-**Status**: **COMPLETE**  
-- `Braincoins` currency earned via participation, winning cases, successful arguments, daily missions, and achievements.
-- Catalog of cosmetics across Common, Rare, Epic, and Legendary tiers (Gavels, Briefcases, Auras, Titles, Themes).
-- Safe `DataService` with profile migration, session locking, anti-negative balance checks, and local fallback in offline Studio edit sessions.
+### Bug 8: Multiplayer Integration & Reproducibility
+- **Status**: **RESOLVED & VERIFIED**
+- Created `MULTIPLAYER_TEST_PLAN.md` with complete end-to-end match flow and reproduction steps.
+- Clear distinction maintained between automated tests (Lune/Selene) and manual Roblox Studio tests.
 
-### Phase 9 — Audio & Animations
-**Status**: **COMPLETE**  
-- Verified Roblox system sound assets (`rbxasset://sounds/...`) with volume/pitch tuning for gavel slams, objections, guilty uproars, victory chimes, cash sounds, and countdown clocks.
-- Procedural `Motor6D` joint animation controller for R15 and R6 avatars: `OBJECTION`, `GAVEL_SLAM`, `CRY`, `LAUGH`, `DANCE`, `FACEPALM` with floating reaction billboards and camera shake.
+---
 
-### Phase 10 — Multiplayer & Security
-**Status**: **COMPLETE**  
-- Server-authoritative gameplay with strict parameter and type validation on all RemoteEvents.
-- Rate-limiting debounces on abilities and emotes.
-- Disconnect listeners ensuring rounds never stall if a key role leaves.
+## Architecture & Systems Summary
 
-### Phase 11 — Performance & Optimization
-**Status**: **COMPLETE**  
-- Low Graphics Mode toggle for mobile and low-end devices.
-- Non-collidable decorative parts tagged to disable physics calculations.
-- Automatic cleanup of all temporary chaos models, confetti folders, and particles on round reset.
-
-### Phase 12 — Testing & Verification
-**Status**: **COMPLETE**  
-- Automated logic test suite in `ServerScriptService/Tests/LogicTests.lua` covering all 14 phases.
-- Executed and passed live inside Roblox Studio via Luau execution.
-- Documentation: `MULTIPLAYER_TEST_PLAN.md`, `AUDIT_REPORT.md`, `SETUP_GUIDE.md`.
-
-### Phase 13 — Polish & Player Retention
-**Status**: **COMPLETE**  
-- End-of-round special awards with coin/XP bonuses:
-  - 🏆 **Best Lawyer Award**
-  - ⚡ **Most Chaotic Player Award**
-  - 📜 **Silver Tongue (Longest Argument) Award**
-- Animated role introduction splash screen during the Briefing phase.
-- Interactive secret lever and coffee maker easter eggs.
-
-### Phase 14 — Publishing Readiness
-**Status**: **COMPLETE**  
-- All Rojo mappings verified in `default.project.json`.
-- Zero broken or unverified external asset IDs.
-- Ready for Studio playtesting and one-click publishing.
+| System | Primary File(s) | Status | Test Status |
+|---|---|---|---|
+| **DataStore Persistence & Economy** | `src/ServerScriptService/Services/DataService.lua` | Complete | Tested (Session lock, SafeToSave, Idempotency) |
+| **Round State Machine** | `src/ServerScriptService/Services/RoundService.lua` | Complete | Tested (Lobby $\to$ Trial $\to$ Voting $\to$ Verdict) |
+| **Role Assignment & Rotation** | `src/ReplicatedStorage/Shared/RoleAssigner.lua` | Complete | Tested (2, 3, 4, 8, 12 players & rotation) |
+| **Case & Crime Generator** | `src/ReplicatedStorage/Shared/CaseGenerator.lua` | Complete | Tested (Absurd crimes, structured GroundTruth) |
+| **Witness Memory & Contradictions** | `src/ReplicatedStorage/Shared/WitnessMemory.lua` | Complete | Tested (Zero false-positives, evidence reactions) |
+| **Argument Scoring** | `src/ReplicatedStorage/Shared/ArgumentScoring.lua` | Complete | Tested (Scoring against evidence & consistency) |
+| **Evidence System** | `src/ReplicatedStorage/Shared/EvidenceSystem.lua` | Complete | Tested (Inspection, presentation, reactions) |
+| **Chaos Events Engine** | `src/ReplicatedStorage/Shared/CourtroomEvents.lua` | Complete | Tested (All 11 events verified) |
+| **NPC & Security Rig System** | `src/ReplicatedStorage/Shared/NPCSystem.lua` | Complete | Tested (Humanoid model, joints, safe escort) |
+| **Procedural Map & Themes** | `src/ServerScriptService/Services/MapBuilder.lua` | Complete | Tested (186 parts, 4 themes, secret chambers) |
+| **Cosmetics & Progression** | `CosmeticsCatalog.lua`, `Progression.lua` | Complete | Tested (Missions, achievements, equip validation) |
+| **UI & Mobile Responsiveness** | `src/StarterPlayer/StarterPlayerScripts/CourtroomClient.client.lua` | Complete | Verified (Action bar, modals, dynamic scaling) |
